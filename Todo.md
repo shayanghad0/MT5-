@@ -11,7 +11,7 @@
 | ✅ | 4 | **Bollinger Bands (%B)** | Volatility / Mean-Reversion | Shows position within bands (0 = lower, 1 = upper) for squeeze/breakout plays. | Generate alerts when %B crosses 0.2 or 0.8. |
 | ✅ | 5 | **ATR (14)** | Volatility | Absolute volatility gauge; used to set dynamic stop-losses (e.g., 1.5x ATR). | Integrate into position sizing and trailing stop logic. |
 | ✅ | 6 | **Stochastic (%K/%D)** | Momentum | Short-term reversal detection when %K crosses %D in extreme zones (>80 / <20). | Filter signals with trend (only buy when uptrend confirmed). |
-| ⌛ | 7 | **CCI (20)** | Momentum / Cycle | Measures trend strength; extremes (+100/-100) signal cyclical turning points. | Use as a secondary filter for RSI/Stochastic divergence. |
+| ✅ | 7 | **CCI (20)** | Momentum / Cycle | Measures trend strength; extremes (+100/-100) signal cyclical turning points. | Use as a secondary filter for RSI/Stochastic divergence. |
 | ⌛ | 8 | **ADX (14)** | Trend Strength | High ADX (>25) = strong trend, Low (<20) = ranging. | Build a regime-switch logic (Trend vs. Range mode). |
 | ⌛ | 9 | **OBV (On-Balance Volume)** | Volume | Confirms price moves (price up + OBV up = healthy; divergence = weakness). | Plot trendline breaks on OBV for early entry signals. |
 | ⌛ | 10 | **VWAP** | Volume / Institutional | "Fair value" for the day; acts as magnetic support/resistance for intraday. | Use as a benchmark for entry/exit (buy below VWAP, sell above). |
