@@ -1,43 +1,41 @@
-'''
-Not Use for yet
-'''
-
-
 import json
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
 
-def predict_next_5_candles_bb(df, period=20, num_std=2):
+def predict_next_5_candles_bb(df, period=20, num_std=2, sma_period=20):
     """
-    Predict direction for the next 5 candles based on Bollinger Bands %B.
+    Predict direction for the next 5 candles based on Bollinger Bands %B and SMA trend.
     Uses:
       - %B = (close - lower) / (upper - lower)
-      - Mean-reversion: %B < 0 => oversold => bullish; %B > 1 => overbought => bearish
-      - Intermediate zones: <0.2 bullish, >0.8 bearish, else neutral
+      - Extreme %B (<0 or >1) -> mean‑reversion (bullish/bearish)
+      - Inside bands: if %B near edges (<0.2 or >0.8) use that, else use SMA trend.
+      - SMA(20) trend: price above SMA -> bullish, below -> bearish.
     Returns a dict with prediction metadata.
     """
-    if len(df) < period:
-        raise ValueError(f"Need at least {period} candles for Bollinger Bands calculation.")
+    if len(df) < max(period, sma_period):
+        raise ValueError(f"Need at least {max(period, sma_period)} candles.")
 
-    # Compute SMA (middle band)
+    # Bollinger Bands
     df['sma'] = df['close'].rolling(window=period).mean()
-    # Compute rolling standard deviation
     df['std'] = df['close'].rolling(window=period).std()
     df['upper'] = df['sma'] + (df['std'] * num_std)
     df['lower'] = df['sma'] - (df['std'] * num_std)
-    # %B
     denominator = df['upper'] - df['lower']
-    denominator[denominator == 0] = 1e-9  # avoid division by zero
+    denominator[denominator == 0] = 1e-9
     df['pct_b'] = (df['close'] - df['lower']) / denominator
+
+    # Additional SMA(20) for trend
+    df['sma_trend'] = df['close'].rolling(window=sma_period).mean()
 
     latest_price = df['close'].iloc[-1]
     latest_pct_b = df['pct_b'].iloc[-1]
     latest_upper = df['upper'].iloc[-1]
     latest_lower = df['lower'].iloc[-1]
     latest_sma = df['sma'].iloc[-1]
+    latest_sma_trend = df['sma_trend'].iloc[-1]
 
-    # Determine band position description
+    # Band position
     if latest_pct_b < 0:
         band_position = "below_lower"
     elif latest_pct_b > 1:
@@ -45,7 +43,8 @@ def predict_next_5_candles_bb(df, period=20, num_std=2):
     else:
         band_position = "inside"
 
-    # ==== PREDICTION LOGIC (only %B) ====
+    # ==== PREDICTION LOGIC (BB %B + SMA trend) ====
+    # 1. Extreme %B – mean‑reversion
     if latest_pct_b < 0:
         prediction = "bullish"
         confidence = "high" if latest_pct_b < -0.1 else "moderate"
@@ -55,7 +54,7 @@ def predict_next_5_candles_bb(df, period=20, num_std=2):
         confidence = "high" if latest_pct_b > 1.1 else "moderate"
         note = "Price above upper band – overbought, mean-reversion down likely."
     else:
-        # Inside bands: use proximity to edges
+        # 2. Inside bands: check proximity to edges
         if latest_pct_b < 0.2:
             prediction = "bullish"
             confidence = "moderate"
@@ -65,9 +64,19 @@ def predict_next_5_candles_bb(df, period=20, num_std=2):
             confidence = "moderate"
             note = "Price near upper band – potential pullback."
         else:
-            prediction = "neutral"
-            confidence = "low"
-            note = "Price in middle of bands – no clear signal."
+            # 3. Neutral zone: use SMA(20) trend
+            if latest_price > latest_sma_trend:
+                prediction = "bullish"
+                confidence = "low"
+                note = "Price in middle of bands but above SMA – mild bullish bias."
+            elif latest_price < latest_sma_trend:
+                prediction = "bearish"
+                confidence = "low"
+                note = "Price in middle of bands but below SMA – mild bearish bias."
+            else:
+                prediction = "neutral"
+                confidence = "low"
+                note = "Price in middle of bands and at SMA – no clear signal."
 
     # Last candle info
     last = df.iloc[-1]
@@ -89,6 +98,7 @@ def predict_next_5_candles_bb(df, period=20, num_std=2):
         "middle_band": round(latest_sma, 2),
         "lower_band": round(latest_lower, 2),
         "band_position": band_position,
+        "sma_trend": round(latest_sma_trend, 2),
         "last_candle_time": f"{last['date']} {last['clock']}",
         "confidence": confidence,
         "note": note,
@@ -98,6 +108,7 @@ def predict_next_5_candles_bb(df, period=20, num_std=2):
         "candle_count": len(df),
         "bb_period": period,
         "bb_std": num_std,
+        "sma_trend_period": sma_period,
         "price_change_30": price_change,
         "price_change_percent": price_change_pct,
         "volume_last": int(last['volume']),
