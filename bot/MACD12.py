@@ -5,32 +5,27 @@ from datetime import datetime, timezone
 
 def predict_next_5_candles_macd(df, fast=12, slow=26, signal=9):
     """
-    Predict direction for the next 5 candles based on MACD histogram slope.
-    Uses:
-      - MACD line = EMA(fast) - EMA(slow)
-      - Signal line = EMA(signal) of MACD line
-      - Histogram = MACD line - Signal line
-      - Slope of histogram over last 3 periods (linear regression)
-    Returns a dict with prediction metadata.
+    Predict direction for the next 5 candles based on MACD histogram.
+    Always returns bullish/bearish (no neutral) based on histogram sign.
+    Confidence: high if slope agrees with position, else low.
     """
     min_period = max(fast, slow, signal) + 3
     if len(df) < min_period:
-        raise ValueError(f"Need at least {min_period} candles for MACD calculation.")
+        raise ValueError(f"Need at least {min_period} candles for MACD.")
 
-    # Compute EMAs
+    # Compute MACD
     df['ema_fast'] = df['close'].ewm(span=fast, adjust=False).mean()
     df['ema_slow'] = df['close'].ewm(span=slow, adjust=False).mean()
     df['macd'] = df['ema_fast'] - df['ema_slow']
     df['signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
-    df['hist'] = df['macd'] - df['signal']  # histogram
+    df['hist'] = df['macd'] - df['signal']
 
-    # Slope of histogram using linear regression over last 3 periods
+    # Histogram slope (last 3 periods)
     def calc_slope(series):
         if len(series) < 3:
             return 0.0
         x = np.arange(len(series))
-        slope = np.polyfit(x, series, 1)[0]
-        return slope
+        return np.polyfit(x, series, 1)[0]
 
     df['hist_slope'] = df['hist'].rolling(3).apply(calc_slope, raw=True)
 
@@ -40,52 +35,29 @@ def predict_next_5_candles_macd(df, fast=12, slow=26, signal=9):
     latest_macd = df['macd'].iloc[-1]
     latest_signal = df['signal'].iloc[-1]
 
-    # Determine if histogram is positive or negative
-    hist_position = "positive" if latest_hist > 0 else "negative" if latest_hist < 0 else "zero"
-
-    # ==== PREDICTION LOGIC (based on histogram slope + position) ====
-    # Primary: slope direction
-    if latest_slope > 0.001:  # small threshold to avoid noise
-        base = "bullish"
-        slope_signal = "rising"
-    elif latest_slope < -0.001:
-        base = "bearish"
-        slope_signal = "falling"
-    else:
-        base = "neutral"
-        slope_signal = "flat"
-
-    # Adjust confidence based on histogram position
-    if hist_position == "positive" and base == "bullish":
+    # ==== PREDICTION: ALWAYS BULLISH OR BEARISH ====
+    if latest_hist > 0:
         prediction = "bullish"
+        hist_pos = "positive"
+    else:
+        prediction = "bearish"
+        hist_pos = "negative"
+
+    # Confidence: high if slope agrees with position
+    if hist_pos == "positive" and latest_slope > 0:
         confidence = "high"
         note = "Histogram positive and rising – strong bullish momentum."
-    elif hist_position == "negative" and base == "bearish":
-        prediction = "bearish"
+    elif hist_pos == "negative" and latest_slope < 0:
         confidence = "high"
         note = "Histogram negative and falling – strong bearish momentum."
-    elif hist_position == "positive" and base == "bearish":
-        prediction = "neutral"
-        confidence = "moderate"
-        note = "Histogram positive but falling – momentum weakening (bullish divergence?)."
-    elif hist_position == "negative" and base == "bullish":
-        prediction = "neutral"
-        confidence = "moderate"
-        note = "Histogram negative but rising – momentum weakening (bearish divergence?)."
     else:
-        # either slope is flat or conflicting signals
-        if latest_hist > 0:
-            prediction = "bullish"
-            confidence = "low"
-            note = "Histogram positive but slope neutral – mild bullish bias."
-        elif latest_hist < 0:
-            prediction = "bearish"
-            confidence = "low"
-            note = "Histogram negative but slope neutral – mild bearish bias."
+        confidence = "low"
+        if hist_pos == "positive" and latest_slope < 0:
+            note = "Histogram positive but falling – bullish momentum weakening."
+        elif hist_pos == "negative" and latest_slope > 0:
+            note = "Histogram negative but rising – bearish momentum weakening."
         else:
-            prediction = "neutral"
-            confidence = "low"
-            note = "Histogram near zero and slope flat – no clear signal."
+            note = f"Histogram {hist_pos} with flat slope – mild {prediction} bias."
 
     # Last candle info
     last = df.iloc[-1]
@@ -105,8 +77,7 @@ def predict_next_5_candles_macd(df, fast=12, slow=26, signal=9):
         "macd_line": round(latest_macd, 4),
         "signal_line": round(latest_signal, 4),
         "hist_slope": round(latest_slope, 4),
-        "slope_signal": slope_signal,
-        "hist_position": hist_position,
+        "hist_position": hist_pos,
         "current_price": round(latest_price, 2),
         "last_candle_time": f"{last['date']} {last['clock']}",
         "confidence": confidence,
