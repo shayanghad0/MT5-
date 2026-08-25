@@ -4,15 +4,9 @@ import numpy as np
 from datetime import datetime, timezone
 
 def compute_atr(df, period=14):
-    """
-    Compute ATR (Average True Range) for the given OHLCV data.
-    df: DataFrame with 'high', 'low', 'close'
-    returns: pandas Series of ATR values
-    """
     high = df['high']
     low = df['low']
     close = df['close'].shift()
-    
     tr1 = high - low
     tr2 = (high - close).abs()
     tr3 = (low - close).abs()
@@ -20,66 +14,60 @@ def compute_atr(df, period=14):
     atr = tr.rolling(window=period).mean()
     return atr
 
-def predict_next_5_candles_atr(df, period=14):
+def predict_next_5_candles(df, atr_period=14, sma_period=20):
     """
-    Predict volatility regime for the next 5 candles based on ATR(14).
-    Uses:
-      - Current ATR
-      - 5-period moving average of ATR (to detect expansion/contraction)
-      - Percentile rank of current ATR over the last 30 candles
-    Returns a dict with prediction metadata.
+    Predicts direction (bearish/bullish/neutral) based on price vs SMA(20),
+    and also reports ATR(14) volatility regime.
     """
-    if len(df) < period + 5:  # need enough for MA and percentile
-        raise ValueError(f"Need at least {period + 5} candles for reliable ATR analysis.")
+    if len(df) < max(atr_period, sma_period) + 5:
+        raise ValueError("Not enough candles.")
 
-    df['atr'] = compute_atr(df, period)
-    # 5-period MA of ATR
+    # --- ATR calculation ---
+    df['atr'] = compute_atr(df, atr_period)
     df['atr_ma'] = df['atr'].rolling(window=5).mean()
-    
     latest_atr = df['atr'].iloc[-1]
     latest_atr_ma = df['atr_ma'].iloc[-1]
-    
-    # Percentile rank of latest ATR over last 30 (or all available)
-    lookback = min(30, len(df))
-    atr_history = df['atr'].iloc[-lookback:]
+    atr_history = df['atr'].iloc[-min(30, len(df)):]
     percentile = (atr_history < latest_atr).sum() / len(atr_history) * 100
-    
-    # Determine volatility regime
-    # Rule: if ATR > 1.1 * ATR_MA => expanding, if < 0.9 => contracting
+
+    # --- SMA trend filter ---
+    df['sma'] = df['close'].rolling(window=sma_period).mean()
+    latest_price = df['close'].iloc[-1]
+    latest_sma = df['sma'].iloc[-1]
+
+    # --- Direction prediction (based on SMA) ---
+    if latest_price > latest_sma:
+        direction = "bullish"
+        dir_confidence = "moderate"
+    elif latest_price < latest_sma:
+        direction = "bearish"
+        dir_confidence = "moderate"
+    else:
+        direction = "neutral"
+        dir_confidence = "low"
+
+    # --- Volatility regime (unchanged) ---
     if latest_atr > latest_atr_ma * 1.1:
         regime = "expanding"
     elif latest_atr < latest_atr_ma * 0.9:
         regime = "contracting"
     else:
         regime = "stable"
-    
-    # Prediction: if expanding and percentile high -> volatile; if contracting and low -> calm
+
+    # Combine: if strong direction and volatility expanding -> higher confidence
     if regime == "expanding" and percentile > 60:
-        prediction = "volatile"
-        confidence = "high" if percentile > 80 else "moderate"
-        note = "ATR rising, volatility increasing – expect wider price swings."
+        vol_note = "Volatility rising."
     elif regime == "contracting" and percentile < 40:
-        prediction = "calm"
-        confidence = "high" if percentile < 20 else "moderate"
-        note = "ATR falling, volatility decreasing – expect tighter ranges."
+        vol_note = "Volatility falling."
     else:
-        # mixed signals -> neutral
-        prediction = "neutral"
-        confidence = "low"
-        note = "No clear volatility signal; ATR is stable or mixed."
+        vol_note = "Volatility stable or mixed."
 
-    # Additional nuance: if percentile is very high regardless of regime
-    if percentile > 90:
-        note += " ATR near historical highs – market turbulence likely."
-    elif percentile < 10:
-        note += " ATR near historical lows – potential for a breakout."
+    # Final note
+    note = f"Direction: {direction} (price {'above' if latest_price > latest_sma else 'below'} SMA{ sma_period}). {vol_note}"
 
-    # Last candle info
+    # Last and first candle
     last = df.iloc[-1]
     first = df.iloc[0]
-
-    # ==== EXTRA METADATA ====
-    latest_price = df['close'].iloc[-1]
     price_change = round(latest_price - first['close'], 2)
     price_change_pct = round((price_change / first['close']) * 100, 2)
     avg_volume = round(df['volume'].mean(), 0)
@@ -87,21 +75,23 @@ def predict_next_5_candles_atr(df, period=14):
     low_30 = round(df['low'].min(), 2)
 
     result = {
-        # Core prediction
-        "prediction": prediction,           # "volatile", "calm", or "neutral"
+        # Main prediction is now DIRECTION
+        "prediction": direction,
+        "direction_confidence": dir_confidence,
+        "volatility_regime": regime,
         "atr": round(latest_atr, 4),
         "atr_ma_5": round(latest_atr_ma, 4),
         "atr_percentile": round(percentile, 1),
-        "regime": regime,                   # expanding / contracting / stable
+        "sma_20": round(latest_sma, 2),
         "current_price": round(latest_price, 2),
+        "price_position": "above" if latest_price > latest_sma else "below" if latest_price < latest_sma else "equal",
         "last_candle_time": f"{last['date']} {last['clock']}",
-        "confidence": confidence,
+        "confidence": "high" if (regime == "expanding" and direction != "neutral") else "moderate" if direction != "neutral" else "low",
         "note": note,
-
-        # Extended fields
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "candle_count": len(df),
-        "atr_period": period,
+        "atr_period": atr_period,
+        "sma_period": sma_period,
         "price_change_30": price_change,
         "price_change_percent": price_change_pct,
         "volume_last": int(last['volume']),
@@ -125,15 +115,14 @@ def main():
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df.dropna(subset=numeric_cols, inplace=True)
-
     df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['clock'])
     df = df.sort_values('datetime').reset_index(drop=True)
 
-    if len(df) < 19:  # at least 14 + 5
-        print(f"Warning: only {len(df)} candles provided. ATR analysis may be unreliable.")
+    if len(df) < 20:
+        print(f"Warning: only {len(df)} candles. Results may be unreliable.")
 
     try:
-        prediction_meta = predict_next_5_candles_atr(df)
+        prediction_meta = predict_next_5_candles(df)
     except Exception as e:
         print(f"Error during prediction: {e}")
         return
