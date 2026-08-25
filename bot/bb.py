@@ -145,7 +145,7 @@ def main():
         print(f"Error during prediction: {e}")
         return
 
-    output_file = 'prediction_output.json'
+    output_file = 'BB_prediction_output.json'
     with open(output_file, 'w') as f:
         json.dump(prediction_meta, f, indent=2)
 
