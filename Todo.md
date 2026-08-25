@@ -13,7 +13,7 @@
 | ✅ | 6 | **Stochastic (%K/%D)** | Momentum | Short-term reversal detection when %K crosses %D in extreme zones (>80 / <20). | Filter signals with trend (only buy when uptrend confirmed). |
 | ✅ | 7 | **CCI (20)** | Momentum / Cycle | Measures trend strength; extremes (+100/-100) signal cyclical turning points. | Use as a secondary filter for RSI/Stochastic divergence. |
 | ✅ | 8 | **ADX (14)** | Trend Strength | High ADX (>25) = strong trend, Low (<20) = ranging. | Build a regime-switch logic (Trend vs. Range mode). |
-| ⌛ | 9 | **OBV (On-Balance Volume)** | Volume | Confirms price moves (price up + OBV up = healthy; divergence = weakness). | Plot trendline breaks on OBV for early entry signals. |
+| ✅ | 9 | **OBV (On-Balance Volume)** | Volume | Confirms price moves (price up + OBV up = healthy; divergence = weakness). | Plot trendline breaks on OBV for early entry signals. |
 | ⌛ | 10 | **VWAP** | Volume / Institutional | "Fair value" for the day; acts as magnetic support/resistance for intraday. | Use as a benchmark for entry/exit (buy below VWAP, sell above). |
 | ⌛ | 11 | **Fibonacci Retracement** | Support/Resistance | Dynamic levels (0.382, 0.5, 0.618) from recent swing high/low. | Automate calculation of recent pivot points to draw zones. |
 | ⌛ | 12 | **Ichimoku (Tenkan/Kijun)** | Trend / Crossover | Tenkan (9) crossing Kijun (26) gives trend signals (similar to EMA cross). | Add cross-over alerts; combine with "Chikou" span for confirmation. |
