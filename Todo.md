@@ -18,5 +18,5 @@
 | ✅ | 11 | **Fibonacci Retracement** | Support/Resistance | Dynamic levels (0.382, 0.5, 0.618) from recent swing high/low. | Automate calculation of recent pivot points to draw zones. |
 | ✅ | 12 | **Ichimoku (Tenkan/Kijun)** | Trend / Crossover | Tenkan (9) crossing Kijun (26) gives trend signals (similar to EMA cross). | Add cross-over alerts; combine with "Chikou" span for confirmation. |
 | ✅ | 13 | **Linear Regression Slope (5)** | Trend Velocity | Measures immediate trend steepness and direction (positive/negative slope). | Use slope angle to gauge momentum intensity (steep = aggressive). |
-| ⌛ | 14 | **Volatility Ratio (ATR/Close)** | Volatility Regime | Normalized volatility percentage; identifies high/low volatility environments. | Adjust strategy parameters dynamically (wide stops in high V.R.). |
+| ✅ | 14 | **Volatility Ratio (ATR/Close)** | Volatility Regime | Normalized volatility percentage; identifies high/low volatility environments. | Adjust strategy parameters dynamically (wide stops in high V.R.). |
 | ⌛ | 15 | **MFI (Money Flow Index, 14)** | Volume / Momentum | Volume-weighted RSI; filters false RSI signals. | Use MFI divergence as a high-conviction reversal trigger. |
