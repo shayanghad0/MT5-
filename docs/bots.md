@@ -1,3 +1,6 @@
+> [!WARNING]
+> AI-generated, for reference only. I dont accept it for Reject it 
+
 **⚠️ Critical Caveat:** With only 30 candles, traditional Machine Learning (LSTM/XGBoost) will severely overfit. Therefore, this code uses a **Weighted Ensemble Scoring System** combining momentum, oscillators, and volatility. It extrapolates the current 5-candle trajectory and adjusts the score using mean-reversion signals (RSI/BB) and trend strength (ADX). This gives a statistically reasonable "best guess" for the immediate short-term direction.
 
 ---

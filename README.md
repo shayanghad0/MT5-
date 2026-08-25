@@ -1,3 +1,6 @@
+> [!WARNING]
+> AI-generated, for reference only. I dont accept it for Reject it 
+
 # MT5 Trading Bots
 
 MetaTrader 5 trading bot workspace. Exports candle data from MT5 and runs technical indicator bots to predict the next 5 candle directions.
