@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Execution Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: #f5f7fa;
+            margin: 20px;
+            padding: 0;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 25px 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin-bottom: 0.2em;
+            color: #0f172a;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 0.95rem;
+            margin-bottom: 2em;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.8em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 14px 16px;
+            border-left: 4px solid #3b82f6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .stat-card .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            font-weight: 600;
+        }
+        .stat-card .value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-top: 4px;
+            line-height: 1.2;
+        }
+        .stat-card .value.positive { color: #22c55e; }
+        .stat-card .value.negative { color: #ef4444; }
+        .stat-card .value.neutral { color: #f59e0b; }
+        .chart-container {
+            background: #fafcfd;
+            border-radius: 12px;
+            padding: 20px 15px 10px 15px;
+            margin: 25px 0 30px 0;
+            border: 1px solid #e9edf2;
+        }
+        .chart-container h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: #1e293b;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+            border-radius: 12px;
+            border: 1px solid #e9edf2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            min-width: 800px;
+        }
+        thead {
+            background: #f1f5f9;
+            border-bottom: 2px solid #d1d9e6;
+        }
+        th {
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #334155;
+            white-space: nowrap;
+        }
+        td {
+            padding: 10px 10px;
+            border-bottom: 1px solid #e9edf2;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #fafbfc;
+        }
+        tbody tr:hover {
+            background-color: #f0f4fe;
+        }
+        .positive { color: #22c55e; font-weight: 600; }
+        .negative { color: #ef4444; font-weight: 600; }
+        .neutral { color: #f59e0b; }
+        .footer {
+            margin-top: 30px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-align: right;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+        }
+        @media (max-width: 600px) {
+            .container { padding: 15px; }
+            .stat-card .value { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Trading Bot Execution Report</h1>
+    <div class="subtitle">
+        Generated: 2026-08-26 16:34:21 &nbsp;|&nbsp; Total trades: 44
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Total Trades</div>
+            <div class="value">44</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Wins / Losses</div>
+            <div class="value">17 / 25</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Win Rate</div>
+            <div class="value">38.6%</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Total Profit (pts)</div>
+            <div class="value positive">724.0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Total Profit (currency)</div>
+            <div class="value positive">7.24</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Max Profit (pts)</div>
+            <div class="value positive">870.0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Max Loss (pts)</div>
+            <div class="value negative">-96.0</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Avg Win (pts)</div>
+            <div class="value positive">119.9</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Avg Loss (pts)</div>
+            <div class="value negative">-52.6</div>
+        </div>
+    </div>
+
+    <!-- Profit Chart -->
+    <div class="chart-container">
+        <h3>📈 Cumulative Profit Over Trades</h3>
+        <canvas id="profitChart" width="400" height="200"></canvas>
+    </div>
+
+    <!-- Trade Table -->
+    <h3 style="margin-top: 25px; margin-bottom: 10px;">📋 Trade Details</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Ticket</th>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Open Time</th>
+                    <th>Close Time</th>
+                    <th>Open Price</th>
+                    <th>Close Price</th>
+                    <th>Profit (pts)</th>
+                    <th>Profit (cur)</th>
+                    <th>Close Reason</th>
+                    <th>Final SL (pts)</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+        <tr>
+            <td>1</td>
+            <td>369977270</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 15:58:35</td>
+            <td></td>
+            <td>4629.44</td>
+            <td>0.00</td>
+            <td class="neutral">0.0</td>
+            <td class="neutral">0.00</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+        </tr>
+        
+        <tr>
+            <td>2</td>
+            <td>369978883</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:00:04</td>
+            <td>2026-08-26 16:00:07</td>
+            <td>4630.01</td>
+            <td>4621.47</td>
+            <td class="positive">870.0</td>
+            <td class="positive">8.70</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+        </tr>
+        
+        <tr>
+            <td>3</td>
+            <td>369980413</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:00:19</td>
+            <td></td>
+            <td>4616.82</td>
+            <td>0.00</td>
+            <td class="neutral">0.0</td>
+            <td class="neutral">0.00</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+        </tr>
+        
+        <tr>
+            <td>4</td>
+            <td>369982624</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:01:41</td>
+            <td>2026-08-26 16:01:42</td>
+            <td>4613.35</td>
+            <td>4614.03</td>
+            <td class="negative">-68.0</td>
+            <td class="negative">-0.68</td>
+            <td>stop_loss</td>
+            <td>N/A</td>
+        </tr>
+        
+        <tr>
+            <td>5</td>
+            <td>369990047</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:10:19</td>
+            <td>2026-08-26 16:10:29</td>
+            <td>4620.79</td>
+            <td>4617.94</td>
+            <td class="positive">255.0</td>
+            <td class="positive">2.55</td>
+            <td>take_profit</td>
+            <td>135</td>
+        </tr>
+        
+        <tr>
+            <td>6</td>
+            <td>369992008</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:13:03</td>
+            <td>2026-08-26 16:13:10</td>
+            <td>4618.31</td>
+            <td>4618.24</td>
+            <td class="positive">27.0</td>
+            <td class="positive">0.27</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>7</td>
+            <td>369993149</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:14:58</td>
+            <td>2026-08-26 16:15:08</td>
+            <td>4622.78</td>
+            <td>4622.22</td>
+            <td class="positive">56.0</td>
+            <td class="positive">0.56</td>
+            <td>trailing_stop</td>
+            <td>60</td>
+        </tr>
+        
+        <tr>
+            <td>8</td>
+            <td>369993436</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:10</td>
+            <td>2026-08-26 16:15:14</td>
+            <td>4623.09</td>
+            <td>4624.21</td>
+            <td class="negative">-81.0</td>
+            <td class="negative">-0.81</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>9</td>
+            <td>369993498</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:16</td>
+            <td>2026-08-26 16:15:19</td>
+            <td>4624.46</td>
+            <td>4624.42</td>
+            <td class="negative">-1.0</td>
+            <td class="negative">-0.01</td>
+            <td>trailing_stop</td>
+            <td>0</td>
+        </tr>
+        
+        <tr>
+            <td>10</td>
+            <td>369993539</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:21</td>
+            <td>2026-08-26 16:15:33</td>
+            <td>4625.13</td>
+            <td>4624.89</td>
+            <td class="positive">32.0</td>
+            <td class="positive">0.32</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>11</td>
+            <td>369993668</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:35</td>
+            <td>2026-08-26 16:15:43</td>
+            <td>4624.27</td>
+            <td>4624.48</td>
+            <td class="negative">-21.0</td>
+            <td class="negative">-0.21</td>
+            <td>trailing_stop</td>
+            <td>0</td>
+        </tr>
+        
+        <tr>
+            <td>12</td>
+            <td>369993696</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:46</td>
+            <td>2026-08-26 16:15:54</td>
+            <td>4623.88</td>
+            <td>4624.82</td>
+            <td class="negative">-96.0</td>
+            <td class="negative">-0.96</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>13</td>
+            <td>369993734</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:15:56</td>
+            <td>2026-08-26 16:16:13</td>
+            <td>4623.95</td>
+            <td>4621.28</td>
+            <td class="positive">267.0</td>
+            <td class="positive">2.67</td>
+            <td>take_profit</td>
+            <td>135</td>
+        </tr>
+        
+        <tr>
+            <td>14</td>
+            <td>369994404</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:17:29</td>
+            <td>2026-08-26 16:17:35</td>
+            <td>4619.03</td>
+            <td>4619.59</td>
+            <td class="negative">-56.0</td>
+            <td class="negative">-0.56</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>15</td>
+            <td>369994437</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:17:37</td>
+            <td>2026-08-26 16:17:38</td>
+            <td>4619.49</td>
+            <td>4619.55</td>
+            <td class="negative">-6.0</td>
+            <td class="negative">-0.06</td>
+            <td>trailing_stop</td>
+            <td>0</td>
+        </tr>
+        
+        <tr>
+            <td>16</td>
+            <td>369994449</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:17:41</td>
+            <td>2026-08-26 16:18:02</td>
+            <td>4619.78</td>
+            <td>4619.33</td>
+            <td class="positive">45.0</td>
+            <td class="positive">0.45</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>17</td>
+            <td>369994685</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:04</td>
+            <td>2026-08-26 16:18:06</td>
+            <td>4620.41</td>
+            <td>4620.92</td>
+            <td class="negative">-51.0</td>
+            <td class="negative">-0.51</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>18</td>
+            <td>369994735</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:08</td>
+            <td>2026-08-26 16:18:11</td>
+            <td>4620.80</td>
+            <td>4621.31</td>
+            <td class="negative">-51.0</td>
+            <td class="negative">-0.51</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>19</td>
+            <td>369994776</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:14</td>
+            <td>2026-08-26 16:18:19</td>
+            <td>4620.89</td>
+            <td>4620.59</td>
+            <td class="positive">30.0</td>
+            <td class="positive">0.30</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>20</td>
+            <td>369994834</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:21</td>
+            <td>2026-08-26 16:18:22</td>
+            <td>4621.52</td>
+            <td>4622.24</td>
+            <td class="negative">-72.0</td>
+            <td class="negative">-0.72</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>21</td>
+            <td>369994862</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:24</td>
+            <td>2026-08-26 16:18:27</td>
+            <td>4621.82</td>
+            <td>4622.46</td>
+            <td class="negative">-64.0</td>
+            <td class="negative">-0.64</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>22</td>
+            <td>369994915</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:29</td>
+            <td>2026-08-26 16:18:35</td>
+            <td>4621.64</td>
+            <td>4621.66</td>
+            <td class="negative">-2.0</td>
+            <td class="negative">-0.02</td>
+            <td>trailing_stop</td>
+            <td>0</td>
+        </tr>
+        
+        <tr>
+            <td>23</td>
+            <td>369994948</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:37</td>
+            <td>2026-08-26 16:18:42</td>
+            <td>4621.39</td>
+            <td>4622.07</td>
+            <td class="negative">-68.0</td>
+            <td class="negative">-0.68</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>24</td>
+            <td>369994978</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:44</td>
+            <td>2026-08-26 16:18:44</td>
+            <td>4621.93</td>
+            <td>4622.49</td>
+            <td class="negative">-56.0</td>
+            <td class="negative">-0.56</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>25</td>
+            <td>369994998</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:47</td>
+            <td>2026-08-26 16:18:49</td>
+            <td>4622.86</td>
+            <td>4623.94</td>
+            <td class="negative">-62.0</td>
+            <td class="negative">-0.62</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>26</td>
+            <td>369995047</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:51</td>
+            <td>2026-08-26 16:18:54</td>
+            <td>4623.32</td>
+            <td>4623.19</td>
+            <td class="positive">13.0</td>
+            <td class="positive">0.13</td>
+            <td>trailing_stop</td>
+            <td>15</td>
+        </tr>
+        
+        <tr>
+            <td>27</td>
+            <td>369995073</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:18:57</td>
+            <td>2026-08-26 16:18:59</td>
+            <td>4623.06</td>
+            <td>4623.60</td>
+            <td class="negative">-54.0</td>
+            <td class="negative">-0.54</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>28</td>
+            <td>369995110</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:19:02</td>
+            <td>2026-08-26 16:19:10</td>
+            <td>4623.81</td>
+            <td>4623.38</td>
+            <td class="positive">43.0</td>
+            <td class="positive">0.43</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>29</td>
+            <td>369995196</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:19:12</td>
+            <td>2026-08-26 16:19:33</td>
+            <td>4623.32</td>
+            <td>4623.29</td>
+            <td class="positive">3.0</td>
+            <td class="positive">0.03</td>
+            <td>trailing_stop</td>
+            <td>15</td>
+        </tr>
+        
+        <tr>
+            <td>30</td>
+            <td>369995310</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:19:35</td>
+            <td>2026-08-26 16:19:37</td>
+            <td>4623.33</td>
+            <td>4623.85</td>
+            <td class="negative">-52.0</td>
+            <td class="negative">-0.52</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>31</td>
+            <td>369995346</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:19:39</td>
+            <td>2026-08-26 16:19:50</td>
+            <td>4624.65</td>
+            <td>4624.39</td>
+            <td class="positive">26.0</td>
+            <td class="positive">0.26</td>
+            <td>trailing_stop</td>
+            <td>30</td>
+        </tr>
+        
+        <tr>
+            <td>32</td>
+            <td>369995398</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:19:52</td>
+            <td>2026-08-26 16:20:03</td>
+            <td>4623.94</td>
+            <td>4624.61</td>
+            <td class="negative">-67.0</td>
+            <td class="negative">-0.67</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>33</td>
+            <td>369995515</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:05</td>
+            <td>2026-08-26 16:20:11</td>
+            <td>4624.48</td>
+            <td>4624.35</td>
+            <td class="positive">13.0</td>
+            <td class="positive">0.13</td>
+            <td>trailing_stop</td>
+            <td>15</td>
+        </tr>
+        
+        <tr>
+            <td>34</td>
+            <td>369995570</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:13</td>
+            <td>2026-08-26 16:20:19</td>
+            <td>4624.58</td>
+            <td>4625.64</td>
+            <td class="negative">-57.0</td>
+            <td class="negative">-0.57</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>35</td>
+            <td>369995625</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:21</td>
+            <td>2026-08-26 16:20:35</td>
+            <td>4625.01</td>
+            <td>4624.57</td>
+            <td class="positive">44.0</td>
+            <td class="positive">0.44</td>
+            <td>trailing_stop</td>
+            <td>45</td>
+        </tr>
+        
+        <tr>
+            <td>36</td>
+            <td>369995703</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:37</td>
+            <td>2026-08-26 16:20:38</td>
+            <td>4624.38</td>
+            <td>4625.05</td>
+            <td class="negative">-67.0</td>
+            <td class="negative">-0.67</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>37</td>
+            <td>369995711</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:40</td>
+            <td>2026-08-26 16:20:41</td>
+            <td>4624.64</td>
+            <td>4625.35</td>
+            <td class="negative">-71.0</td>
+            <td class="negative">-0.71</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>38</td>
+            <td>369995846</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:43</td>
+            <td>2026-08-26 16:20:53</td>
+            <td>4625.39</td>
+            <td>4625.16</td>
+            <td class="positive">23.0</td>
+            <td class="positive">0.23</td>
+            <td>trailing_stop</td>
+            <td>30</td>
+        </tr>
+        
+        <tr>
+            <td>39</td>
+            <td>369995929</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:55</td>
+            <td>2026-08-26 16:20:56</td>
+            <td>4625.04</td>
+            <td>4625.14</td>
+            <td class="negative">-10.0</td>
+            <td class="negative">-0.10</td>
+            <td>trailing_stop</td>
+            <td>0</td>
+        </tr>
+        
+        <tr>
+            <td>40</td>
+            <td>369995983</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:20:59</td>
+            <td>2026-08-26 16:20:59</td>
+            <td>4624.75</td>
+            <td>4625.25</td>
+            <td class="negative">-50.0</td>
+            <td class="negative">-0.50</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>41</td>
+            <td>369996029</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:21:01</td>
+            <td>2026-08-26 16:21:03</td>
+            <td>4624.90</td>
+            <td>4625.40</td>
+            <td class="negative">-50.0</td>
+            <td class="negative">-0.50</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>42</td>
+            <td>369996075</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:21:05</td>
+            <td>2026-08-26 16:21:09</td>
+            <td>4625.37</td>
+            <td>4626.18</td>
+            <td class="negative">-81.0</td>
+            <td class="negative">-0.81</td>
+            <td>stop_loss</td>
+            <td>-50</td>
+        </tr>
+        
+        <tr>
+            <td>43</td>
+            <td>369996150</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:21:11</td>
+            <td>2026-08-26 16:21:30</td>
+            <td>4626.00</td>
+            <td>4625.61</td>
+            <td class="positive">39.0</td>
+            <td class="positive">0.39</td>
+            <td>trailing_stop</td>
+            <td>75</td>
+        </tr>
+        
+        <tr>
+            <td>44</td>
+            <td>369996265</td>
+            <td>XAUUSD</td>
+            <td>SELL</td>
+            <td>2026-08-26 16:21:32</td>
+            <td>2026-08-26 16:21:43</td>
+            <td>4625.16</td>
+            <td>4622.64</td>
+            <td class="positive">252.0</td>
+            <td class="positive">2.52</td>
+            <td>take_profit</td>
+            <td>135</td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        Report generated automatically from trades.json • 2026-08-26 16:34:21
+    </div>
+</div>
+
+<script>
+    // === Chart.js cumulative profit chart ===
+    (function() {
+        const ctx = document.getElementById('profitChart').getContext('2d');
+        const labels = ["Trade 1", "Trade 2", "Trade 3", "Trade 4", "Trade 5", "Trade 6", "Trade 7", "Trade 8", "Trade 9", "Trade 10", "Trade 11", "Trade 12", "Trade 13", "Trade 14", "Trade 15", "Trade 16", "Trade 17", "Trade 18", "Trade 19", "Trade 20", "Trade 21", "Trade 22", "Trade 23", "Trade 24", "Trade 25", "Trade 26", "Trade 27", "Trade 28", "Trade 29", "Trade 30", "Trade 31", "Trade 32", "Trade 33", "Trade 34", "Trade 35", "Trade 36", "Trade 37", "Trade 38", "Trade 39", "Trade 40", "Trade 41", "Trade 42", "Trade 43", "Trade 44"];
+        const dataPoints = [0, 870.0, 870.0, 802.0, 1057.0, 1084.0, 1140.0, 1059.0, 1058.0, 1090.0, 1069.0, 973.0, 1240.0, 1184.0, 1178.0, 1223.0, 1172.0, 1121.0, 1151.0, 1079.0, 1015.0, 1013.0, 945.0, 889.0, 827.0, 840.0, 786.0, 829.0, 832.0, 780.0, 806.0, 739.0, 752.0, 695.0, 739.0, 672.0, 601.0, 624.0, 614.0, 564.0, 514.0, 433.0, 472.0, 724.0];
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Cumulative Profit (points)',
+                    data: dataPoints,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true,
+                    pointRadius: 2,
+                    pointBackgroundColor: '#3b82f6'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Profit (points)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Trade Sequence'
+                        }
+                    }
+                }
+            }
+        });
+    })();
+</script>
+
+</body>
+</html>
