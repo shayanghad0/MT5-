@@ -6,10 +6,11 @@ import MetaTrader5 as mt5
 # --- Configuration ---
 CONCLUSION_FILE = "conclusion.json"
 TRADES_FILE = "trades.json"
-VOLUME = 0.01                     # Fixed lot size
-TP_POINTS = 250                   # Take-profit in points
-CHECK_INTERVAL = 1                # Seconds between price checks
-MAX_WAIT_SECONDS = 3600 * 24      # Stop monitoring after 24h (optional)
+VOLUME = 0.01
+TP_POINTS = 250
+SL_POINTS = 50
+CHECK_INTERVAL = 0.05              # 50 milliseconds
+MAX_WAIT_SECONDS = 3600 * 24       # 24 hours per trade
 
 def read_conclusion(file_path):
     try:
@@ -65,9 +66,9 @@ def place_market_order(symbol, order_type, volume):
         "price": price,
         "deviation": 20,
         "magic": 123456,
-        "comment": "BotTrail",                      # <31 chars
+        "comment": "BotTrail",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,      # Most widely supported
+        "type_filling": mt5.ORDER_FILLING_IOC,
     }
 
     result = mt5.order_send(request)
@@ -77,7 +78,6 @@ def place_market_order(symbol, order_type, volume):
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"Order failed: {result.comment}, retcode={result.retcode}")
-        # Optionally retry with FOK if IOC fails
         return None
 
     print(f"Order placed: {order_type.upper()} {volume} {symbol} at {price}")
@@ -141,9 +141,11 @@ def monitor_and_close(trade):
         print(f"Invalid point value for {symbol}.")
         return trade
 
+    sl_points = -SL_POINTS
+    print(f"Initial stop-loss set at {sl_points} points")
+
     start_time = time.time()
     close_reason = None
-    sl_points = None
     profit_points = 0
 
     while True:
@@ -166,22 +168,26 @@ def monitor_and_close(trade):
             current_price = tick.ask
             profit_points = (open_price - current_price) / point
 
-        # Update trailing stop
+        # Update trailing stop (ratchet up) – only when profit >= 25
         if profit_points >= 25:
             new_sl = 15 * max(0, (int(profit_points) - 25) // 25)
-            if sl_points is None or new_sl > sl_points:
+            if new_sl > sl_points:
                 sl_points = new_sl
                 print(f"Trailing SL updated to +{sl_points} pts")
 
-        # TP / SL checks
+        # Display current status
+        print(f"Profit: {profit_points:.2f} pts | SL: {sl_points} pts", end='\r')
+
+        # TP check
         if profit_points >= TP_POINTS:
             print(f"\nTP reached ({profit_points:.1f} pts) – closing position {ticket}")
             close_reason = "take_profit"
             close_result = close_position(ticket, symbol, volume, direction)
             break
-        elif sl_points is not None and profit_points <= sl_points:
-            print(f"\nTrailing SL hit (profit {profit_points:.1f} pts <= {sl_points} pts) – closing")
-            close_reason = "trailing_stop"
+        # SL check (hard or trailing)
+        elif profit_points <= sl_points:
+            print(f"\nSL hit (profit {profit_points:.1f} pts <= {sl_points} pts) – closing")
+            close_reason = "stop_loss" if sl_points == -SL_POINTS else "trailing_stop"
             close_result = close_position(ticket, symbol, volume, direction)
             break
 
@@ -237,19 +243,40 @@ def main():
         mt5.shutdown()
         return
 
-    trade = place_market_order(symbol, order_type, VOLUME)
-    if trade is None:
-        print("Failed to place order. Exiting.")
-        mt5.shutdown()
-        return
+    print(f"Starting unlimited bot for {symbol} – direction {order_type}")
+    print("Will re‑enter on SL until TP is hit.\n")
 
-    trade = monitor_and_close(trade)
-    trade["conclusion"] = conclusion
-    trade["timestamp"] = timestamp
+    while True:
+        # Place order
+        trade = place_market_order(symbol, order_type, VOLUME)
+        if trade is None:
+            print("Failed to place order. Exiting.")
+            break
 
-    append_trade(trade)
+        # Monitor until close
+        trade = monitor_and_close(trade)
+
+        # Attach metadata
+        trade["conclusion"] = conclusion
+        trade["timestamp"] = timestamp
+
+        # Log this trade
+        append_trade(trade)
+
+        # Decide whether to re‑enter or stop
+        if trade.get("close_reason") == "take_profit":
+            print("Take‑profit hit – stopping the bot.")
+            break
+        elif trade.get("close_reason") in ["stop_loss", "trailing_stop", "timeout", "external_close"]:
+            print(f"Trade closed by {trade.get('close_reason')} – re‑entering...")
+            time.sleep(2)   # brief pause before next entry
+            continue
+        else:
+            print(f"Unexpected close reason: {trade.get('close_reason')} – stopping.")
+            break
+
     mt5.shutdown()
-    print("Done.")
+    print("Bot finished.")
 
 if __name__ == "__main__":
     main()
