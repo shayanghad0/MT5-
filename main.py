@@ -20,7 +20,8 @@ def archive_report():
     folder = "html-report"
     os.makedirs(folder, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Use only current time in HH:MM:SS format (e.g., 12:23:32)
+    timestamp = datetime.now().strftime("%H:%M:%S")
     new_name = f"{timestamp}.report.html"
     dest = os.path.join(folder, new_name)
 
