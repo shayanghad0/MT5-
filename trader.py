@@ -9,11 +9,12 @@ TRADES_FILE = "trades.json"
 VOLUME = 0.01
 TP_POINTS = 250
 INITIAL_SL_POINTS = 30
-BREAK_EVEN_PROFIT = 15      # points profit to trigger breakeven
-TRAILING_STOP = 15          # points to trail after breakeven
-CHECK_INTERVAL = 1          # seconds between checks
-TIMEOUT_SECONDS = 300       # 5 minutes per trade attempt
-MAX_RETRIES = None          # unlimited retries on SL (None = infinite)
+BREAK_EVEN_PROFIT = 15
+TRAILING_STOP = 15
+CHECK_INTERVAL = 1
+TIMEOUT_SECONDS = 300
+MAX_RETRIES = None
+MIN_STOP_DISTANCE_POINTS = 20   # safety margin to avoid invalid stops
 
 def read_conclusion(file_path):
     try:
@@ -39,12 +40,55 @@ def append_trade(trade_info, file_path=TRADES_FILE):
     except Exception as e:
         print(f"Error writing to {file_path}: {e}")
 
+def get_valid_sl_price(symbol, direction, requested_sl, entry_price, min_points):
+    """
+    Ensure SL is valid: it must be at least min_points away from the current price
+    and on the correct side of entry.
+    """
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        return None
+    point = symbol_info.point
+    tick = mt5.symbol_info_tick(symbol)
+    
+    if direction == 'buy':
+        # SL must be below current bid and not too close
+        min_sl = tick.bid - (min_points * point)
+        # Also SL should not be above entry (for buy, SL should be below entry)
+        if requested_sl >= entry_price:
+            requested_sl = entry_price - (INITIAL_SL_POINTS * point)  # reset
+        # Ensure at least min_points below bid
+        if requested_sl > min_sl:
+            requested_sl = min_sl
+        # Finally, ensure SL is not above or equal to entry
+        if requested_sl >= entry_price:
+            requested_sl = entry_price - (INITIAL_SL_POINTS * point)
+        return requested_sl
+    else:  # sell
+        # SL must be above current ask and not too close
+        max_sl = tick.ask + (min_points * point)
+        if requested_sl <= entry_price:
+            requested_sl = entry_price + (INITIAL_SL_POINTS * point)
+        if requested_sl < max_sl:
+            requested_sl = max_sl
+        if requested_sl <= entry_price:
+            requested_sl = entry_price + (INITIAL_SL_POINTS * point)
+        return requested_sl
+
 def modify_sl(ticket, symbol, new_sl):
-    """Modify the stop-loss of an open position."""
+    """Modify stop-loss with validation."""
     position = mt5.positions_get(ticket=ticket)
     if not position or len(position) == 0:
         return False
     pos = position[0]
+    direction = 'buy' if pos.type == mt5.ORDER_TYPE_BUY else 'sell'
+    
+    # Validate SL
+    valid_sl = get_valid_sl_price(symbol, direction, new_sl, pos.price_open, MIN_STOP_DISTANCE_POINTS)
+    if valid_sl is None or abs(valid_sl - new_sl) > 0.0001:
+        print(f"SL {new_sl} invalid, using {valid_sl} instead")
+        new_sl = valid_sl
+    
     request = {
         "action": mt5.TRADE_ACTION_SLTP,
         "symbol": symbol,
@@ -60,10 +104,9 @@ def modify_sl(ticket, symbol, new_sl):
     return True
 
 def close_position(ticket, symbol):
-    """Close an open position at market price."""
     position = mt5.positions_get(ticket=ticket)
     if not position or len(position) == 0:
-        return True  # already closed
+        return True
     pos = position[0]
     order_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
     tick = mt5.symbol_info_tick(symbol)
@@ -89,7 +132,6 @@ def close_position(ticket, symbol):
     return True
 
 def place_order(symbol, order_type, volume, tp_points, initial_sl_points):
-    """Place a market order with TP and initial SL."""
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
         print(f"Symbol {symbol} not found.")
@@ -110,6 +152,13 @@ def place_order(symbol, order_type, volume, tp_points, initial_sl_points):
         entry_price = tick.bid
         tp_price = entry_price - tp_points * point
         sl_price = entry_price + initial_sl_points * point
+
+    # Validate SL before sending
+    valid_sl = get_valid_sl_price(symbol, order_type, sl_price, entry_price, MIN_STOP_DISTANCE_POINTS)
+    if valid_sl is None:
+        print("Could not calculate valid SL, skipping order.")
+        return None
+    sl_price = valid_sl
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -142,32 +191,21 @@ def place_order(symbol, order_type, volume, tp_points, initial_sl_points):
     }
 
 def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeout_seconds):
-    """
-    Monitor the trade with trailing SL and timeout.
-    Returns:
-        'tp' if take-profit hit
-        'sl' if stop-loss hit (including trailing)
-        'timeout' if timer expired and position was closed
-    """
     start_time = time.time()
     sl_breakeven_triggered = False
     best_price = entry_price
     current_sl = entry_price - INITIAL_SL_POINTS * point if direction == 'buy' else entry_price + INITIAL_SL_POINTS * point
 
     while True:
-        # Check if position still exists
         positions = mt5.positions_get(ticket=ticket)
         if not positions or len(positions) == 0:
-            # Position closed. Determine if it was TP or SL.
-            # Check history for the close deal.
-            from_date = datetime.now() - timedelta(minutes=5)  # look back a bit
+            # Check history to determine TP or SL
+            from_date = datetime.now() - timedelta(minutes=5)
             deals = mt5.history_deals_get(ticket=ticket, from_date=from_date)
             if deals and len(deals) > 0:
-                # Find the deal that closed the position (type == DEAL_TYPE_BUY or SELL)
                 for deal in deals:
                     if deal.position_id == ticket and deal.type in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
                         close_price = deal.price
-                        # Check if close price is near TP
                         if direction == 'buy':
                             if close_price >= tp_price - 2 * point:
                                 return 'tp'
@@ -178,9 +216,8 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
                                 return 'tp'
                             else:
                                 return 'sl'
-            return 'sl'  # fallback
+            return 'sl'
 
-        # Get current position and price
         pos = positions[0]
         tick = mt5.symbol_info_tick(symbol)
 
@@ -195,7 +232,7 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
             if current_price < best_price:
                 best_price = current_price
 
-        # --- Trailing SL logic (same as before) ---
+        # Trailing logic with validation
         if not sl_breakeven_triggered and profit_points >= BREAK_EVEN_PROFIT:
             print(f"Profit reached {profit_points:.2f} points → moving SL to breakeven")
             new_sl = entry_price
@@ -216,9 +253,8 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
                     if modify_sl(ticket, symbol, new_sl):
                         current_sl = new_sl
 
-        # --- Timeout check ---
-        elapsed = time.time() - start_time
-        if elapsed >= timeout_seconds:
+        # Timeout
+        if time.time() - start_time >= timeout_seconds:
             print(f"Timeout reached ({timeout_seconds}s). Closing position.")
             close_position(ticket, symbol)
             return 'timeout'
@@ -226,9 +262,6 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
         time.sleep(CHECK_INTERVAL)
 
 def run_trading_session(symbol, direction, volume, tp_points, initial_sl_points, timeout_seconds, max_retries):
-    """
-    Repeatedly trade until TP hit, or timeout, or max retries exceeded.
-    """
     attempt = 0
     while True:
         if max_retries is not None and attempt >= max_retries:
@@ -238,68 +271,45 @@ def run_trading_session(symbol, direction, volume, tp_points, initial_sl_points,
         # Place order
         result = place_order(symbol, direction, volume, tp_points, initial_sl_points)
         if not result:
-            break
+            print("Order placement failed, retrying after delay...")
+            time.sleep(5)
+            attempt += 1
+            continue
 
         ticket = result['ticket']
         entry_price = result['entry_price']
         tp_price = result['tp_price']
         point = result['point']
 
-        # Monitor this trade
         outcome = monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeout_seconds)
+
+        # Log outcome
+        trade_record = {
+            "symbol": symbol,
+            "direction": direction,
+            "volume": volume,
+            "open_price": entry_price,
+            "tp_price": tp_price,
+            "initial_sl": result['sl_price'],
+            "ticket": ticket,
+            "outcome": outcome.upper(),
+            "placed_at": datetime.now().isoformat(),
+            "attempt": attempt + 1,
+        }
+        append_trade(trade_record)
 
         if outcome == 'tp':
             print(f"Trade {ticket} hit TP. Stopping trading session.")
-            # Log the final trade
-            trade_record = {
-                "symbol": symbol,
-                "direction": direction,
-                "volume": volume,
-                "open_price": entry_price,
-                "tp_price": tp_price,
-                "initial_sl": result['sl_price'],
-                "ticket": ticket,
-                "outcome": "TP",
-                "placed_at": datetime.now().isoformat(),
-                "attempt": attempt + 1,
-            }
-            append_trade(trade_record)
-            break  # success, stop
+            break
 
         elif outcome == 'sl':
             print(f"Trade {ticket} hit SL. Re-opening (attempt {attempt+1})")
             attempt += 1
-            # Log the SL trade
-            trade_record = {
-                "symbol": symbol,
-                "direction": direction,
-                "volume": volume,
-                "open_price": entry_price,
-                "tp_price": tp_price,
-                "initial_sl": result['sl_price'],
-                "ticket": ticket,
-                "outcome": "SL",
-                "placed_at": datetime.now().isoformat(),
-                "attempt": attempt,
-            }
-            append_trade(trade_record)
-            continue  # retry
+            time.sleep(2)   # small delay before re-entering
+            continue
 
         elif outcome == 'timeout':
             print(f"Trade {ticket} timed out and was closed. Stopping.")
-            trade_record = {
-                "symbol": symbol,
-                "direction": direction,
-                "volume": volume,
-                "open_price": entry_price,
-                "tp_price": tp_price,
-                "initial_sl": result['sl_price'],
-                "ticket": ticket,
-                "outcome": "TIMEOUT",
-                "placed_at": datetime.now().isoformat(),
-                "attempt": attempt + 1,
-            }
-            append_trade(trade_record)
             break
 
         else:
