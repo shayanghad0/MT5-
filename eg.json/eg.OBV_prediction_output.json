@@ -1,0 +1,23 @@
+{
+  "prediction": "bearish",
+  "obv": -56.0,
+  "obv_slope": -35.8,
+  "obv_trend": "falling",
+  "divergence": "none",
+  "sma_20": 4642.24,
+  "current_price": 4641.7,
+  "last_candle_time": "2026-08-26 07:35:00",
+  "confidence": "moderate",
+  "note": "Trend and OBV agree: bearish momentum.",
+  "timestamp": "2026-08-26T04:36:13.753981+00:00",
+  "candle_count": 30,
+  "obv_period": 14,
+  "sma_period": 20,
+  "price_change_30": -1.03,
+  "price_change_percent": -0.02,
+  "volume_last": 79,
+  "average_volume_30": 86,
+  "high_30": 4644.13,
+  "low_30": 4640.56,
+  "first_price": 4642.73
+}

@@ -1,0 +1,21 @@
+{
+  "prediction": "bearish",
+  "vwap": 4642.49,
+  "vwap_slope": -0.02,
+  "sma_20": 4642.24,
+  "current_price": 4641.7,
+  "price_vwap_diff_pct": 0.02,
+  "last_candle_time": "2026-08-26 07:35:00",
+  "confidence": "low",
+  "note": "Price near VWAP, using SMA bias: bearish.",
+  "timestamp": "2026-08-26T04:36:18.083059+00:00",
+  "candle_count": 30,
+  "sma_period": 20,
+  "price_change_30": -1.03,
+  "price_change_percent": -0.02,
+  "volume_last": 79,
+  "average_volume_30": 86,
+  "high_30": 4644.13,
+  "low_30": 4640.56,
+  "first_price": 4642.73
+}

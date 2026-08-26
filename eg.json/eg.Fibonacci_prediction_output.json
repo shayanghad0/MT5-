@@ -1,0 +1,33 @@
+{
+  "prediction": "bearish",
+  "fib_levels": {
+    "0.0": 4640.56,
+    "0.236": 4641.4,
+    "0.382": 4641.92,
+    "0.5": 4642.34,
+    "0.618": 4642.77,
+    "0.786": 4643.37,
+    "1.0": 4644.13
+  },
+  "nearest_fib_level": "0.382",
+  "nearest_fib_value": 4641.92,
+  "distance_to_nearest_pct": 0.0,
+  "swing_high": 4644.13,
+  "swing_low": 4640.56,
+  "sma_20": 4642.24,
+  "current_price": 4641.7,
+  "last_candle_time": "2026-08-26 07:35:00",
+  "confidence": "moderate",
+  "note": "Price near 0.382 support (below 0.5 Fib level) \u2013 potential bounce but trend bearish.",
+  "timestamp": "2026-08-26T04:36:08.053695+00:00",
+  "candle_count": 30,
+  "lookback": 30,
+  "sma_period": 20,
+  "price_change_30": -1.03,
+  "price_change_percent": -0.02,
+  "volume_last": 79,
+  "average_volume_30": 86,
+  "high_30": 4644.13,
+  "low_30": 4640.56,
+  "first_price": 4642.73
+}

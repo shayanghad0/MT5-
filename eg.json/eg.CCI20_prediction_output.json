@@ -1,0 +1,22 @@
+{
+  "prediction": "bullish",
+  "cci": -170.36,
+  "cci_slope": -67.6,
+  "sma_20": 4642.24,
+  "current_price": 4641.7,
+  "trend": "bearish",
+  "last_candle_time": "2026-08-26 07:35:00",
+  "confidence": "high",
+  "note": "Oversold (CCI=-170.4) \u2013 mean reversion up likely.",
+  "timestamp": "2026-08-26T04:36:04.799829+00:00",
+  "candle_count": 30,
+  "cci_period": 20,
+  "sma_period": 20,
+  "price_change_30": -1.03,
+  "price_change_percent": -0.02,
+  "volume_last": 79,
+  "average_volume_30": 86,
+  "high_30": 4644.13,
+  "low_30": 4640.56,
+  "first_price": 4642.73
+}

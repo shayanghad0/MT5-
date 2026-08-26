@@ -1,0 +1,23 @@
+{
+  "prediction": "bearish",
+  "adx": 19.33,
+  "plus_di": 16.69,
+  "minus_di": 16.75,
+  "di_bias": "bearish",
+  "sma_20": 4642.24,
+  "current_price": 4641.7,
+  "last_candle_time": "2026-08-26 07:35:00",
+  "confidence": "low",
+  "note": "Weak trend (ADX=19.3), price below SMA \u2013 mild bearish.",
+  "timestamp": "2026-08-26T04:36:01.612258+00:00",
+  "candle_count": 30,
+  "adx_period": 14,
+  "sma_period": 20,
+  "price_change_30": -1.03,
+  "price_change_percent": -0.02,
+  "volume_last": 79,
+  "average_volume_30": 86,
+  "high_30": 4644.13,
+  "low_30": 4640.56,
+  "first_price": 4642.73
+}
