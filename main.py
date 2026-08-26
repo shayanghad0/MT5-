@@ -2,9 +2,12 @@ import subprocess
 import sys
 import json
 import os
+import glob
+import shutil
 
 SYMBOL = "XAUUSD"
 BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot")
+JSON_DIR = os.path.join("json")
 CANDLES_PATH = os.path.join(BOT_DIR, "candles.json")
 OUTPUT_PATH = os.path.join(BOT_DIR, "prediction_output.json")
 
@@ -71,11 +74,10 @@ def run_bots():
             continue
 
         stdout = result.stdout.strip()
-        json_start = stdout.rfind("{")
-        json_end = stdout.rfind("}") + 1
-        if json_start != -1 and json_end > json_start:
+        json_start = stdout.find("{")
+        if json_start != -1:
             try:
-                data = json.loads(stdout[json_start:json_end])
+                data = json.loads(stdout[json_start:])
                 results[bot] = data
                 pred = data.get("prediction", "?")
                 conf = data.get("confidence", "?")
@@ -125,6 +127,20 @@ def main():
     else:
         print(f"  ENSEMBLE SIGNAL: NEUTRAL / MIXED")
     print()
+
+    move_json_to_folder()
+
+
+def move_json_to_folder():
+    os.makedirs(JSON_DIR, exist_ok=True)
+    moved = 0
+    for json_file in glob.glob(os.path.join(BOT_DIR, "*.json")):
+        if os.path.basename(json_file) == "candles.json":
+            continue
+        dest = os.path.join(JSON_DIR, os.path.basename(json_file))
+        shutil.move(json_file, dest)
+        moved += 1
+    print(f"  Moved {moved} JSON files to: {JSON_DIR}")
 
 
 if __name__ == "__main__":

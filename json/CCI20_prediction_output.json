@@ -1,0 +1,22 @@
+{
+  "prediction": "bullish",
+  "cci": 96.22,
+  "cci_slope": 55.47,
+  "sma_20": 4642.43,
+  "current_price": 4643.15,
+  "trend": "bullish",
+  "last_candle_time": "2026-08-26 07:31:00",
+  "confidence": "moderate",
+  "note": "CCI neutral (96.2) with bullish trend (slope: rising).",
+  "timestamp": "2026-08-26T04:32:41.279962+00:00",
+  "candle_count": 30,
+  "cci_period": 20,
+  "sma_period": 20,
+  "price_change_30": 0.68,
+  "price_change_percent": 0.01,
+  "volume_last": 78,
+  "average_volume_30": 90,
+  "high_30": 4644.49,
+  "low_30": 4641.14,
+  "first_price": 4642.47
+}
