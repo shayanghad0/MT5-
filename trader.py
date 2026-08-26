@@ -2,10 +2,12 @@ import json
 import time
 from datetime import datetime, timedelta
 import MetaTrader5 as mt5
+import os
 
 # --- Configuration ---
 CONCLUSION_FILE = "conclusion.json"
 TRADES_FILE = "trades.json"
+REPORT_FILE = "report.html"
 VOLUME = 0.01
 TP_POINTS = 250
 INITIAL_SL_POINTS = 30
@@ -14,7 +16,9 @@ TRAILING_STOP = 15
 CHECK_INTERVAL = 1
 TIMEOUT_SECONDS = 300
 MAX_RETRIES = None
-MIN_STOP_DISTANCE_POINTS = 20   # safety margin to avoid invalid stops
+MIN_STOP_DISTANCE_POINTS = 20
+
+# ---------- Helper functions ----------
 
 def read_conclusion(file_path):
     try:
@@ -24,48 +28,38 @@ def read_conclusion(file_path):
         print(f"Error reading {file_path}: {e}")
         return None
 
-def append_trade(trade_info, file_path=TRADES_FILE):
+def load_trades(file_path=TRADES_FILE):
     try:
-        try:
-            with open(file_path, 'r') as f:
-                trades = json.load(f)
-                if not isinstance(trades, list):
-                    trades = []
-        except (FileNotFoundError, json.JSONDecodeError):
-            trades = []
-        trades.append(trade_info)
-        with open(file_path, 'w') as f:
-            json.dump(trades, f, indent=2)
-        print(f"Trade logged to {file_path}")
-    except Exception as e:
-        print(f"Error writing to {file_path}: {e}")
+        with open(file_path, 'r') as f:
+            trades = json.load(f)
+            return trades if isinstance(trades, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def append_trade(trade_info, file_path=TRADES_FILE):
+    trades = load_trades(file_path)
+    trades.append(trade_info)
+    with open(file_path, 'w') as f:
+        json.dump(trades, f, indent=2)
+    print(f"Trade logged to {file_path}")
 
 def get_valid_sl_price(symbol, direction, requested_sl, entry_price, min_points):
-    """
-    Ensure SL is valid: it must be at least min_points away from the current price
-    and on the correct side of entry.
-    """
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
         return None
     point = symbol_info.point
     tick = mt5.symbol_info_tick(symbol)
-    
+
     if direction == 'buy':
-        # SL must be below current bid and not too close
         min_sl = tick.bid - (min_points * point)
-        # Also SL should not be above entry (for buy, SL should be below entry)
         if requested_sl >= entry_price:
-            requested_sl = entry_price - (INITIAL_SL_POINTS * point)  # reset
-        # Ensure at least min_points below bid
+            requested_sl = entry_price - (INITIAL_SL_POINTS * point)
         if requested_sl > min_sl:
             requested_sl = min_sl
-        # Finally, ensure SL is not above or equal to entry
         if requested_sl >= entry_price:
             requested_sl = entry_price - (INITIAL_SL_POINTS * point)
         return requested_sl
     else:  # sell
-        # SL must be above current ask and not too close
         max_sl = tick.ask + (min_points * point)
         if requested_sl <= entry_price:
             requested_sl = entry_price + (INITIAL_SL_POINTS * point)
@@ -76,19 +70,16 @@ def get_valid_sl_price(symbol, direction, requested_sl, entry_price, min_points)
         return requested_sl
 
 def modify_sl(ticket, symbol, new_sl):
-    """Modify stop-loss with validation."""
     position = mt5.positions_get(ticket=ticket)
     if not position or len(position) == 0:
         return False
     pos = position[0]
     direction = 'buy' if pos.type == mt5.ORDER_TYPE_BUY else 'sell'
-    
-    # Validate SL
     valid_sl = get_valid_sl_price(symbol, direction, new_sl, pos.price_open, MIN_STOP_DISTANCE_POINTS)
     if valid_sl is None or abs(valid_sl - new_sl) > 0.0001:
         print(f"SL {new_sl} invalid, using {valid_sl} instead")
         new_sl = valid_sl
-    
+
     request = {
         "action": mt5.TRADE_ACTION_SLTP,
         "symbol": symbol,
@@ -131,6 +122,23 @@ def close_position(ticket, symbol):
     print(f"Position closed manually (timeout).")
     return True
 
+def get_close_info(ticket):
+    """Retrieve close price and profit from history for a given ticket."""
+    # Get all deals for this position (last 10 minutes)
+    from_date = datetime.now() - timedelta(minutes=10)
+    deals = mt5.history_deals_get(position=ticket, from_date=from_date)
+    if deals and len(deals) > 0:
+        # The closing deal is usually the last one that is not a reversal
+        for deal in reversed(deals):
+            if deal.type in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
+                return {
+                    "close_price": deal.price,
+                    "profit": deal.profit,
+                    "profit_currency": deal.profit_currency,
+                    "time": deal.time,
+                }
+    return None
+
 def place_order(symbol, order_type, volume, tp_points, initial_sl_points):
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
@@ -153,7 +161,6 @@ def place_order(symbol, order_type, volume, tp_points, initial_sl_points):
         tp_price = entry_price - tp_points * point
         sl_price = entry_price + initial_sl_points * point
 
-    # Validate SL before sending
     valid_sl = get_valid_sl_price(symbol, order_type, sl_price, entry_price, MIN_STOP_DISTANCE_POINTS)
     if valid_sl is None:
         print("Could not calculate valid SL, skipping order.")
@@ -199,24 +206,23 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
     while True:
         positions = mt5.positions_get(ticket=ticket)
         if not positions or len(positions) == 0:
-            # Check history to determine TP or SL
-            from_date = datetime.now() - timedelta(minutes=5)
-            deals = mt5.history_deals_get(ticket=ticket, from_date=from_date)
-            if deals and len(deals) > 0:
-                for deal in deals:
-                    if deal.position_id == ticket and deal.type in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL):
-                        close_price = deal.price
-                        if direction == 'buy':
-                            if close_price >= tp_price - 2 * point:
-                                return 'tp'
-                            else:
-                                return 'sl'
-                        else:
-                            if close_price <= tp_price + 2 * point:
-                                return 'tp'
-                            else:
-                                return 'sl'
-            return 'sl'
+            # Position closed – get close info
+            close_info = get_close_info(ticket)
+            if close_info:
+                # Determine outcome based on close price relative to TP
+                if direction == 'buy':
+                    if close_info['close_price'] >= tp_price - 2 * point:
+                        outcome = 'tp'
+                    else:
+                        outcome = 'sl'
+                else:
+                    if close_info['close_price'] <= tp_price + 2 * point:
+                        outcome = 'tp'
+                    else:
+                        outcome = 'sl'
+                return outcome, close_info
+            else:
+                return 'sl', None  # fallback
 
         pos = positions[0]
         tick = mt5.symbol_info_tick(symbol)
@@ -232,7 +238,6 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
             if current_price < best_price:
                 best_price = current_price
 
-        # Trailing logic with validation
         if not sl_breakeven_triggered and profit_points >= BREAK_EVEN_PROFIT:
             print(f"Profit reached {profit_points:.2f} points → moving SL to breakeven")
             new_sl = entry_price
@@ -253,11 +258,13 @@ def monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeo
                     if modify_sl(ticket, symbol, new_sl):
                         current_sl = new_sl
 
-        # Timeout
         if time.time() - start_time >= timeout_seconds:
             print(f"Timeout reached ({timeout_seconds}s). Closing position.")
             close_position(ticket, symbol)
-            return 'timeout'
+            # Wait a bit for history to update
+            time.sleep(1)
+            close_info = get_close_info(ticket)
+            return 'timeout', close_info
 
         time.sleep(CHECK_INTERVAL)
 
@@ -268,7 +275,6 @@ def run_trading_session(symbol, direction, volume, tp_points, initial_sl_points,
             print(f"Max retries ({max_retries}) reached. Stopping.")
             break
 
-        # Place order
         result = place_order(symbol, direction, volume, tp_points, initial_sl_points)
         if not result:
             print("Order placement failed, retrying after delay...")
@@ -281,9 +287,9 @@ def run_trading_session(symbol, direction, volume, tp_points, initial_sl_points,
         tp_price = result['tp_price']
         point = result['point']
 
-        outcome = monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeout_seconds)
+        outcome, close_info = monitor_trade(ticket, symbol, entry_price, direction, point, tp_price, timeout_seconds)
 
-        # Log outcome
+        # Build trade record
         trade_record = {
             "symbol": symbol,
             "direction": direction,
@@ -293,27 +299,156 @@ def run_trading_session(symbol, direction, volume, tp_points, initial_sl_points,
             "initial_sl": result['sl_price'],
             "ticket": ticket,
             "outcome": outcome.upper(),
-            "placed_at": datetime.now().isoformat(),
             "attempt": attempt + 1,
+            "open_time": datetime.now().isoformat(),
         }
+        if close_info:
+            trade_record.update({
+                "close_price": close_info['close_price'],
+                "profit": close_info['profit'],
+                "profit_currency": close_info['profit_currency'],
+                "close_time": datetime.fromtimestamp(close_info['time']).isoformat()
+            })
+        else:
+            trade_record.update({
+                "close_price": None,
+                "profit": None,
+                "profit_currency": None,
+                "close_time": None
+            })
+
         append_trade(trade_record)
 
         if outcome == 'tp':
             print(f"Trade {ticket} hit TP. Stopping trading session.")
             break
-
         elif outcome == 'sl':
             print(f"Trade {ticket} hit SL. Re-opening (attempt {attempt+1})")
             attempt += 1
-            time.sleep(2)   # small delay before re-entering
+            time.sleep(2)
             continue
-
         elif outcome == 'timeout':
             print(f"Trade {ticket} timed out and was closed. Stopping.")
             break
-
         else:
             break
+
+# ---------- HTML Report Generator ----------
+
+def generate_html_report(trades_file=TRADES_FILE, output_file=REPORT_FILE):
+    trades = load_trades(trades_file)
+    if not trades:
+        print("No trades found to generate report.")
+        return
+
+    # Compute stats
+    total_trades = len(trades)
+    wins = [t for t in trades if t.get('profit', 0) > 0]
+    losses = [t for t in trades if t.get('profit', 0) < 0]
+    win_count = len(wins)
+    loss_count = len(losses)
+    win_rate = win_count / total_trades * 100 if total_trades > 0 else 0
+    total_profit = sum(t.get('profit', 0) for t in trades)
+    avg_profit = total_profit / total_trades if total_trades > 0 else 0
+    max_profit = max((t.get('profit', 0) for t in trades), default=0)
+    max_loss = min((t.get('profit', 0) for t in trades), default=0)
+    # Best and worst trades
+    best_trade = max(trades, key=lambda x: x.get('profit', 0)) if trades else None
+    worst_trade = min(trades, key=lambda x: x.get('profit', 0)) if trades else None
+
+    # Build HTML
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Trading Bot Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; background: #f4f6f9; }}
+            .container {{ max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+            .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 15px; margin: 20px 0; }}
+            .stat-box {{ background: #ecf0f1; padding: 15px; border-radius: 6px; text-align: center; }}
+            .stat-box .label {{ font-size: 14px; color: #7f8c8d; }}
+            .stat-box .value {{ font-size: 24px; font-weight: bold; color: #2c3e50; }}
+            .stat-box.profit .value {{ color: #27ae60; }}
+            .stat-box.loss .value {{ color: #e74c3c; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ padding: 10px; text-align: center; border-bottom: 1px solid #ddd; }}
+            th {{ background: #34495e; color: white; }}
+            tr.win {{ background: #d5f5e3; }}
+            tr.loss {{ background: #fadbd8; }}
+            tr.timeout {{ background: #fcf3cf; }}
+            .footer {{ margin-top: 20px; color: #95a5a6; font-size: 12px; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 Trading Bot Performance Report</h1>
+            <div class="stats">
+                <div class="stat-box"><span class="label">Total Trades</span><div class="value">{total_trades}</div></div>
+                <div class="stat-box"><span class="label">Win Rate</span><div class="value">{win_rate:.1f}%</div></div>
+                <div class="stat-box profit"><span class="label">Total P&L</span><div class="value">{total_profit:.2f}</div></div>
+                <div class="stat-box"><span class="label">Avg P&L</span><div class="value">{avg_profit:.2f}</div></div>
+                <div class="stat-box profit"><span class="label">Best Trade</span><div class="value">{max_profit:.2f}</div></div>
+                <div class="stat-box loss"><span class="label">Worst Trade</span><div class="value">{max_loss:.2f}</div></div>
+            </div>
+            <h2>Trade History</h2>
+            <table>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Volume</th>
+                    <th>Open Price</th>
+                    <th>Close Price</th>
+                    <th>Profit</th>
+                    <th>Outcome</th>
+                    <th>Open Time</th>
+                    <th>Close Time</th>
+                </tr>
+    """
+
+    for t in trades:
+        direction = t.get('direction', '').upper()
+        outcome = t.get('outcome', '')
+        profit = t.get('profit', 0)
+        row_class = 'win' if profit > 0 else 'loss' if profit < 0 else 'timeout'
+        close_price = t.get('close_price', '')
+        if close_price is None:
+            close_price = '-'
+        open_time = t.get('open_time', '')[:19] if t.get('open_time') else ''
+        close_time = t.get('close_time', '')[:19] if t.get('close_time') else ''
+        html += f"""
+                <tr class="{row_class}">
+                    <td>{t.get('ticket', '')}</td>
+                    <td>{t.get('symbol', '')}</td>
+                    <td>{direction}</td>
+                    <td>{t.get('volume', '')}</td>
+                    <td>{t.get('open_price', '')}</td>
+                    <td>{close_price}</td>
+                    <td>{profit:.2f if profit is not None else '-'}</td>
+                    <td>{outcome}</td>
+                    <td>{open_time}</td>
+                    <td>{close_time}</td>
+                </tr>
+        """
+
+    html += """
+            </table>
+            <div class="footer">
+                Report generated on {0} by MT5 Trader Bot.
+            </div>
+        </div>
+    </body>
+    </html>
+    """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    with open(output_file, 'w') as f:
+        f.write(html)
+    print(f"HTML report saved to {output_file}")
+
+# ---------- Main ----------
 
 def main():
     if not mt5.initialize():
@@ -350,8 +485,11 @@ def main():
         max_retries=MAX_RETRIES
     )
 
+    # Generate HTML report from saved trades
+    generate_html_report()
+
     mt5.shutdown()
-    print("Done.")
+    print("Done. Report generated.")
 
 if __name__ == "__main__":
     main()
