@@ -92,14 +92,59 @@ def run_bots():
     return results
 
 
+def move_json_to_folder():
+    """Move generated JSON files (except candles.json) to the json/ directory."""
+    os.makedirs(JSON_DIR, exist_ok=True)
+    moved = 0
+    for json_file in glob.glob(os.path.join(BOT_DIR, "*.json")):
+        if os.path.basename(json_file) == "candles.json":
+            continue
+        dest = os.path.join(JSON_DIR, os.path.basename(json_file))
+        shutil.move(json_file, dest)
+        moved += 1
+    print(f"  Moved {moved} JSON files to: {JSON_DIR}")
+
+
+def run_conclusion():
+    """
+    Execute bot.py to read ensemble_output.json and print the final
+    bullish/bearish conclusion along with metadata.
+    """
+    print("\n" + "=" * 60)
+    print("  Running ensemble conclusion (bot.py)...")
+    print("=" * 60)
+
+    bot_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.py")
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    result = subprocess.run(
+        [sys.executable, bot_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("STDERR:", result.stderr)
+
+
 def main():
     print("=" * 60)
     print(f"  MT5 Ensemble Bot Runner - {SYMBOL}")
     print("=" * 60)
 
+    # Step 1: export candles
     run_export()
+
+    # Step 2: run all indicator bots
     results = run_bots()
 
+    # Build ensemble_output.json
     final = {
         "symbol": SYMBOL,
         "bot_count": len(BOTS),
@@ -114,33 +159,26 @@ def main():
     print(f"  Ensemble results saved to: {out_file}")
     print(f"{'=' * 60}")
 
+    # Quick summary from predictions (optional)
     predictions = [r.get("prediction") for r in results.values() if "prediction" in r]
     bullish = predictions.count("bullish")
     bearish = predictions.count("bearish")
     neutral = predictions.count("neutral")
 
-    print(f"\n  SUMMARY: {bullish} bullish | {bearish} bearish | {neutral} neutral")
+    print(f"\n  QUICK SUMMARY: {bullish} bullish | {bearish} bearish | {neutral} neutral")
     if bullish > bearish:
-        print(f"  ENSEMBLE SIGNAL: BULLISH ({bullish}/{len(predictions)})")
+        print(f"  QUICK SIGNAL: BULLISH ({bullish}/{len(predictions)})")
     elif bearish > bullish:
-        print(f"  ENSEMBLE SIGNAL: BEARISH ({bearish}/{len(predictions)})")
+        print(f"  QUICK SIGNAL: BEARISH ({bearish}/{len(predictions)})")
     else:
-        print(f"  ENSEMBLE SIGNAL: NEUTRAL / MIXED")
+        print(f"  QUICK SIGNAL: NEUTRAL / MIXED")
     print()
 
+    # Move JSON files to json/ directory
     move_json_to_folder()
 
-
-def move_json_to_folder():
-    os.makedirs(JSON_DIR, exist_ok=True)
-    moved = 0
-    for json_file in glob.glob(os.path.join(BOT_DIR, "*.json")):
-        if os.path.basename(json_file) == "candles.json":
-            continue
-        dest = os.path.join(JSON_DIR, os.path.basename(json_file))
-        shutil.move(json_file, dest)
-        moved += 1
-    print(f"  Moved {moved} JSON files to: {JSON_DIR}")
+    # Run conclusion script (bot.py)
+    run_conclusion()
 
 
 if __name__ == "__main__":
