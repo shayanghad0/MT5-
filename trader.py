@@ -10,7 +10,7 @@ VOLUME = 0.01
 TP_POINTS = 250
 SL_POINTS = 50
 CHECK_INTERVAL = 0.05              # 50 milliseconds
-MAX_WAIT_SECONDS = 3600 * 24       # 24 hours per trade (kept for safety)
+MAX_WAIT_SECONDS = 3600 * 24       # 24 hours per trade (fallback)
 MAX_RUN_SECONDS = 5 * 60           # 5 minutes overall runtime
 
 def read_conclusion(file_path):
@@ -133,7 +133,7 @@ def close_position(ticket, symbol, volume, direction):
 def monitor_and_close(trade, overall_start_time):
     """
     Monitor price with dynamic trailing SL and fixed TP.
-    Checks overall runtime; if exceeded, closes position with reason 'global_timeout'.
+    Displays a countdown timer until the 5‑minute limit.
     """
     symbol = trade["symbol"]
     ticket = trade["ticket"]
@@ -152,10 +152,13 @@ def monitor_and_close(trade, overall_start_time):
     start_time = time.time()
     close_reason = None
     profit_points = 0
+    last_print_time = 0  # throttle printing to avoid console spam
 
     while True:
         # ----- Global timeout check -----
-        if time.time() - overall_start_time > MAX_RUN_SECONDS:
+        elapsed = time.time() - overall_start_time
+        remaining = MAX_RUN_SECONDS - elapsed
+        if remaining <= 0:
             print(f"\nGlobal runtime limit ({MAX_RUN_SECONDS}s) exceeded – closing position {ticket}.")
             close_reason = "global_timeout"
             close_result = close_position(ticket, symbol, volume, direction)
@@ -187,8 +190,10 @@ def monitor_and_close(trade, overall_start_time):
                 sl_points = new_sl
                 print(f"Trailing SL updated to +{sl_points} pts")
 
-        # Display current status
-        print(f"Profit: {profit_points:.2f} pts | SL: {sl_points} pts", end='\r')
+        # Display status with countdown (throttled to ~2 updates/sec)
+        if time.time() - last_print_time >= 0.5:
+            print(f"Profit: {profit_points:.2f} pts | SL: {sl_points} pts | Time left: {remaining:.1f}s", end='\r')
+            last_print_time = time.time()
 
         # TP check
         if profit_points >= TP_POINTS:
@@ -203,7 +208,7 @@ def monitor_and_close(trade, overall_start_time):
             close_result = close_position(ticket, symbol, volume, direction)
             break
 
-        # Per-trade timeout (kept as fallback)
+        # Per-trade timeout (fallback)
         if time.time() - start_time > MAX_WAIT_SECONDS:
             print(f"\nMax wait time exceeded – closing position {ticket} manually.")
             close_reason = "timeout"
