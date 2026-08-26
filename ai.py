@@ -51,7 +51,7 @@ def run_export():
 
 
 def run_bots():
-    print(f"\n[2/2] Running {len(BOTS)} indicator bots...\n")
+    print(f"\n[2/2] Running {len(BOTS)-1} indicator bots...\n")
     results = {}
 
     env = os.environ.copy()
