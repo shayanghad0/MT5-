@@ -6,7 +6,8 @@ import MetaTrader5 as mt5
 # --- Configuration ---
 CONCLUSION_FILE = "conclusion.json"
 TRADES_FILE = "trades.json"
-VOLUME = 0.01  # Fixed lot size (adjust as needed)
+VOLUME = 0.01                 # Fixed lot size (adjust as needed)
+TP_POINTS = 250               # Take Profit in points (symbol-specific)
 
 def read_conclusion(file_path):
     """Read and parse the conclusion JSON file."""
@@ -21,7 +22,6 @@ def read_conclusion(file_path):
 def append_trade(trade_info, file_path=TRADES_FILE):
     """Append a trade record to the trades JSON file."""
     try:
-        # Load existing trades or create an empty list
         try:
             with open(file_path, 'r') as f:
                 trades = json.load(f)
@@ -38,10 +38,10 @@ def append_trade(trade_info, file_path=TRADES_FILE):
     except Exception as e:
         print(f"Error writing to {file_path}: {e}")
 
-def place_market_order(symbol, order_type, volume):
+def place_market_order(symbol, order_type, volume, tp_points):
     """
-    Place a market order (buy or sell) with no SL/TP.
-    order_type: 'buy' or 'sell'
+    Place a market order (buy or sell) with a Take Profit set to tp_points
+    from the entry price. No Stop Loss.
     Returns the order result dictionary or None if failed.
     """
     # Ensure symbol is available
@@ -50,11 +50,21 @@ def place_market_order(symbol, order_type, volume):
         print(f"Symbol {symbol} not found.")
         return None
 
-    # If the symbol is not visible, add it
     if not symbol_info.visible:
         if not mt5.symbol_select(symbol, True):
             print(f"Failed to select symbol {symbol}.")
             return None
+
+    tick = mt5.symbol_info_tick(symbol)
+    point = symbol_info.point
+
+    # Determine entry price and TP price
+    if order_type == 'buy':
+        entry_price = tick.ask
+        tp_price = entry_price + (tp_points * point)
+    else:  # sell
+        entry_price = tick.bid
+        tp_price = entry_price - (tp_points * point)
 
     # Prepare the order request
     request = {
@@ -62,8 +72,9 @@ def place_market_order(symbol, order_type, volume):
         "symbol": symbol,
         "volume": volume,
         "type": mt5.ORDER_TYPE_BUY if order_type == 'buy' else mt5.ORDER_TYPE_SELL,
-        "price": mt5.symbol_info_tick(symbol).ask if order_type == 'buy' else mt5.symbol_info_tick(symbol).bid,
-        "deviation": 20,  # Slippage tolerance in points
+        "price": entry_price,
+        "tp": tp_price,               # <--- TAKE PROFIT SET HERE
+        "deviation": 20,
         "magic": 123456,
         "comment": "Bot trade",
         "type_time": mt5.ORDER_TIME_GTC,
@@ -76,26 +87,25 @@ def place_market_order(symbol, order_type, volume):
         print(f"Order failed: {result.comment}, retcode={result.retcode}")
         return None
 
-    print(f"Order placed: {order_type.upper()} {volume} {symbol} at {request['price']}")
+    print(f"Order placed: {order_type.upper()} {volume} {symbol} at {entry_price}, TP at {tp_price}")
     return {
         "ticket": result.order,
         "symbol": symbol,
         "direction": order_type,
         "volume": volume,
-        "open_price": request["price"],
+        "open_price": entry_price,
+        "tp_price": tp_price,
         "time": datetime.now().isoformat(),
         "comment": result.comment,
     }
 
 def main():
-    # Initialize MT5 connection
     if not mt5.initialize():
         print("MT5 initialization failed.")
         return
 
-    print("MT5 initialized. Terminal info:", mt5.terminal_info())
+    print("MT5 initialized.")
 
-    # Read the conclusion
     conclusion = read_conclusion(CONCLUSION_FILE)
     if not conclusion:
         return
@@ -106,7 +116,6 @@ def main():
 
     print(f"Received conclusion for {symbol}: {conclusion_text}")
 
-    # Determine action
     if conclusion_text == "bullish":
         order_type = "buy"
     elif conclusion_text == "bearish":
@@ -115,25 +124,23 @@ def main():
         print("No actionable conclusion (neutral or unknown). Exiting.")
         return
 
-    # Place the order
-    trade_result = place_market_order(symbol, order_type, VOLUME)
+    trade_result = place_market_order(symbol, order_type, VOLUME, TP_POINTS)
     if trade_result is None:
         return
 
-    # Append trade info to trades.json (including the conclusion data)
     trade_record = {
         "symbol": symbol,
         "direction": order_type,
         "volume": VOLUME,
         "open_price": trade_result["open_price"],
+        "tp_price": trade_result["tp_price"],
         "ticket": trade_result["ticket"],
         "timestamp": timestamp,
         "placed_at": datetime.now().isoformat(),
-        "conclusion": conclusion,  # keep the full original conclusion for reference
+        "conclusion": conclusion,
     }
     append_trade(trade_record)
 
-    # Shutdown MT5
     mt5.shutdown()
     print("Done.")
 
