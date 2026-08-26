@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
 bot.py - Read ensemble_output.json from json/ folder and conclude overall market sentiment.
-The script aggregates predictions from multiple bots, optionally weighting by confidence,
-and prints the conclusion (bullish/bearish) along with metadata.
+Aggregates predictions from all bots, weighted by confidence, prints a clear BULLISH/BEARISH
+conclusion with metadata, and saves the final signal to conclusion.json in the root folder.
 """
 
 import json
 import os
 from datetime import datetime
 
-# Path to the JSON file
+# Path to the JSON files
 JSON_FOLDER = "json"
 JSON_FILE = "ensemble_output.json"
 JSON_PATH = os.path.join(JSON_FOLDER, JSON_FILE)
+
+# Save conclusion.json in the same directory as this script (root folder)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONCLUSION_PATH = os.path.join(SCRIPT_DIR, "conclusion.json")
 
 # Confidence weights for aggregation
 CONFIDENCE_WEIGHTS = {
@@ -21,12 +25,14 @@ CONFIDENCE_WEIGHTS = {
     "high": 3
 }
 
+
 def load_ensemble_data(path):
     """Load and parse the ensemble JSON file."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"JSON file not found: {path}")
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
+
 
 def aggregate_predictions(results):
     """
@@ -70,6 +76,7 @@ def aggregate_predictions(results):
         "per_bot": per_bot
     }
 
+
 def decide_conclusion(agg):
     """Decide final conclusion based on weighted scores, fallback to majority."""
     if agg["weighted_bullish"] > agg["weighted_bearish"]:
@@ -85,11 +92,36 @@ def decide_conclusion(agg):
         else:
             return "NEUTRAL"
 
+
+def save_conclusion(symbol, conclusion, agg):
+    """Save the conclusion summary to conclusion.json in the root folder."""
+    conclusion_data = {
+        "symbol": symbol,
+        "conclusion": conclusion.lower(),  # "bullish", "bearish", or "neutral"
+        "timestamp": datetime.now().isoformat(),
+        "bullish_count": agg["bullish_count"],
+        "bearish_count": agg["bearish_count"],
+        "neutral_count": agg["neutral_count"],
+        "weighted_bullish": agg["weighted_bullish"],
+        "weighted_bearish": agg["weighted_bearish"],
+    }
+    with open(CONCLUSION_PATH, 'w', encoding='utf-8') as f:
+        json.dump(conclusion_data, f, indent=2)
+
+
 def print_summary(data, agg, conclusion, metadata):
     """Print a formatted summary of the ensemble conclusion."""
     symbol = data.get("symbol", "UNKNOWN")
     bot_count = data.get("bot_count", len(data.get("results", {})))
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Calculate confidence percentage
+    total_weight = agg["weighted_bullish"] + agg["weighted_bearish"]
+    if total_weight > 0:
+        bullish_pct = (agg["weighted_bullish"] / total_weight) * 100
+        bearish_pct = (agg["weighted_bearish"] / total_weight) * 100
+    else:
+        bullish_pct = bearish_pct = 0
 
     print("=" * 60)
     print(f"ENSEMBLE ANALYSIS REPORT - {now}")
@@ -103,8 +135,10 @@ def print_summary(data, agg, conclusion, metadata):
     print(f"Neutral/Unknown predictions: {agg['neutral_count']}")
     print(f"Weighted Bullish Score: {agg['weighted_bullish']}")
     print(f"Weighted Bearish Score: {agg['weighted_bearish']}")
+    print(f"Bullish Confidence: {bullish_pct:.1f}%")
+    print(f"Bearish Confidence: {bearish_pct:.1f}%")
     print("-" * 60)
-    print(f"*** OVERALL CONCLUSION: {conclusion} ***")
+    print(f"*** FINAL SIGNAL: {conclusion} ***")
     print("=" * 60)
 
     # Print per-bot details
@@ -119,6 +153,7 @@ def print_summary(data, agg, conclusion, metadata):
         print("\nAdditional Metadata:")
         for key, value in metadata.items():
             print(f"  {key}: {value}")
+
 
 def main():
     try:
@@ -141,8 +176,16 @@ def main():
     # Gather metadata from top-level (excluding results for brevity)
     metadata = {k: v for k, v in data.items() if k != "results"}
 
+    # Add the final conclusion to the metadata for display
+    metadata["Conclusion"] = conclusion
+
+    # Save conclusion to JSON file in root folder
+    symbol = data.get("symbol", "UNKNOWN")
+    save_conclusion(symbol, conclusion, agg)
+
     # Print summary
     print_summary(data, agg, conclusion, metadata)
+
 
 if __name__ == "__main__":
     main()
