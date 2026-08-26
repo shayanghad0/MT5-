@@ -1,0 +1,21 @@
+{
+  "prediction": "bullish",
+  "mfi": 57.37,
+  "mfi_change": -0.56,
+  "sma_20": 4611.76,
+  "current_price": 4613.78,
+  "last_candle_time": "2026-08-26 16:38:00",
+  "confidence": "low",
+  "note": "MFI neutral (57.4) with bullish trend.",
+  "timestamp": "2026-08-26T13:39:51.188414+00:00",
+  "candle_count": 30,
+  "mfi_period": 14,
+  "sma_period": 20,
+  "price_change_30": 4.4,
+  "price_change_percent": 0.1,
+  "volume_last": 233,
+  "average_volume_30": 218,
+  "high_30": 4619.12,
+  "low_30": 4598.2,
+  "first_price": 4609.38
+}
