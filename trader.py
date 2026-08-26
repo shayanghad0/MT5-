@@ -7,7 +7,8 @@ import MetaTrader5 as mt5
 CONCLUSION_FILE = "conclusion.json"
 TRADES_FILE = "trades.json"
 VOLUME = 0.01                     # Fixed lot size
-TP_POINTS = 50                   # Target profit in points (not pips)
+TP_POINTS = 250                   # Take-profit in points
+SL_POINTS = 50                    # Stop-loss in points
 CHECK_INTERVAL = 1                # Seconds between price checks
 MAX_WAIT_SECONDS = 3600 * 24      # Stop monitoring after 24h (optional)
 
@@ -54,7 +55,7 @@ def place_market_order(symbol, order_type, volume):
         "price": price,
         "deviation": 20,
         "magic": 123456,
-        "comment": "Bot trade - virtual TP",
+        "comment": "Bot trade - virtual TP/SL",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
@@ -74,7 +75,6 @@ def place_market_order(symbol, order_type, volume):
 
 def close_position(ticket, symbol, volume, direction):
     """Close a position by ticket using opposite market order."""
-    # Determine opposite direction
     if direction == 'buy':
         order_type = mt5.ORDER_TYPE_SELL
         price = mt5.symbol_info_tick(symbol).bid
@@ -91,7 +91,7 @@ def close_position(ticket, symbol, volume, direction):
         "price": price,
         "deviation": 20,
         "magic": 123456,
-        "comment": "Close via virtual TP",
+        "comment": "Close via virtual TP/SL",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
@@ -103,66 +103,72 @@ def close_position(ticket, symbol, volume, direction):
     return result
 
 def monitor_and_close(trade):
-    """Monitor price until TP is hit, then close the trade."""
+    """Monitor price until TP or SL is hit, then close the trade."""
     symbol = trade["symbol"]
     ticket = trade["ticket"]
     direction = trade["direction"]
     open_price = trade["open_price"]
     volume = trade["volume"]
 
-    # Get point value
     point = mt5.symbol_info(symbol).point
-    tp_in_price = TP_POINTS * point   # absolute price difference
-
     start_time = time.time()
+    close_reason = None
+
     while True:
-        # Check if position still exists (in case it was closed manually)
+        # Check if position still exists
         positions = mt5.positions_get(ticket=ticket)
         if not positions:
-            print(f"Position {ticket} no longer exists – assuming closed.")
+            print(f"Position {ticket} no longer exists – assuming closed externally.")
+            close_reason = "external_close"
             break
 
-        # Get current price
         tick = mt5.symbol_info_tick(symbol)
         if direction == 'buy':
-            current_price = tick.bid   # for profit calculation, buy uses bid
+            current_price = tick.bid
             profit_points = (current_price - open_price) / point
         else:
-            current_price = tick.ask   # sell uses ask
+            current_price = tick.ask
             profit_points = (open_price - current_price) / point
 
-        print(f"Current profit: {profit_points:.1f} points", end='\r')
+        print(f"Current profit: {profit_points:.1f} pts", end='\r')
 
-        # Check if TP reached
+        # Check TP and SL
         if profit_points >= TP_POINTS:
             print(f"\nTP reached ({profit_points:.1f} pts) – closing position {ticket}")
+            close_reason = "take_profit"
             close_result = close_position(ticket, symbol, volume, direction)
-            if close_result:
-                # Update trade record with close info
-                close_price = close_result.price if hasattr(close_result, 'price') else current_price
-                trade["close_price"] = close_price
-                trade["close_time"] = datetime.now().isoformat()
-                trade["profit_points"] = profit_points
-                trade["profit"] = (close_price - open_price) * volume * 100 if direction == 'buy' else (open_price - close_price) * volume * 100
-                # approximate profit in deposit currency (simplified)
-                # For XAUUSD, 1 point = 0.01, volume 0.01 -> profit = points * 0.01 * 100? Actually, we'll just store points.
-                # More accurate: trade["profit"] = profit_points * point * volume * 100? Let's just store points and let user calculate.
-                trade["profit"] = profit_points * point * volume * 100  # simplified, check symbol trade calculation
-            else:
-                trade["close_time"] = datetime.now().isoformat()
-                trade["note"] = "Close attempt failed"
+            break
+        elif profit_points <= -SL_POINTS:
+            print(f"\nSL reached ({profit_points:.1f} pts) – closing position {ticket}")
+            close_reason = "stop_loss"
+            close_result = close_position(ticket, symbol, volume, direction)
             break
 
-        # Optional timeout
+        # Timeout
         if time.time() - start_time > MAX_WAIT_SECONDS:
             print(f"\nMax wait time exceeded – closing position {ticket} manually.")
-            close_position(ticket, symbol, volume, direction)
-            trade["close_time"] = datetime.now().isoformat()
-            trade["note"] = "Closed due to timeout"
+            close_reason = "timeout"
+            close_result = close_position(ticket, symbol, volume, direction)
             break
 
         time.sleep(CHECK_INTERVAL)
 
+    # If we have a close result or external close, update trade record
+    if 'close_result' in locals() and close_result:
+        close_price = close_result.price if hasattr(close_result, 'price') else current_price
+        trade["close_price"] = close_price
+        trade["close_time"] = datetime.now().isoformat()
+        trade["profit_points"] = profit_points
+        # Approximate profit in deposit currency (simplified)
+        # For many symbols, profit = (points * point * volume * 100) but may vary; we store points.
+        trade["profit"] = profit_points * point * volume * 100  # adjust for contract size if needed
+    else:
+        # External close or timeout without result
+        trade["close_time"] = datetime.now().isoformat()
+        trade["profit_points"] = profit_points if 'profit_points' in locals() else None
+        trade["note"] = f"Closed without explicit result (reason: {close_reason})"
+
+    trade["close_reason"] = close_reason
     return trade
 
 def main():
@@ -188,22 +194,16 @@ def main():
         mt5.shutdown()
         return
 
-    # Place the order
     trade = place_market_order(symbol, order_type, VOLUME)
     if trade is None:
         mt5.shutdown()
         return
 
-    # Monitor until TP or timeout
     trade = monitor_and_close(trade)
-
-    # Add conclusion data
     trade["conclusion"] = conclusion
     trade["timestamp"] = timestamp
 
-    # Log final trade record
     append_trade(trade)
-
     mt5.shutdown()
     print("Done.")
 
