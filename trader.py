@@ -10,7 +10,8 @@ VOLUME = 0.01
 TP_POINTS = 250
 SL_POINTS = 50
 CHECK_INTERVAL = 0.05              # 50 milliseconds
-MAX_WAIT_SECONDS = 3600 * 24       # 24 hours per trade
+MAX_WAIT_SECONDS = 3600 * 24       # 24 hours per trade (kept for safety)
+MAX_RUN_SECONDS = 5 * 60           # 5 minutes overall runtime
 
 def read_conclusion(file_path):
     try:
@@ -129,7 +130,11 @@ def close_position(ticket, symbol, volume, direction):
     print(f"Position {ticket} closed at {price}")
     return result
 
-def monitor_and_close(trade):
+def monitor_and_close(trade, overall_start_time):
+    """
+    Monitor price with dynamic trailing SL and fixed TP.
+    Checks overall runtime; if exceeded, closes position with reason 'global_timeout'.
+    """
     symbol = trade["symbol"]
     ticket = trade["ticket"]
     direction = trade["direction"]
@@ -149,6 +154,13 @@ def monitor_and_close(trade):
     profit_points = 0
 
     while True:
+        # ----- Global timeout check -----
+        if time.time() - overall_start_time > MAX_RUN_SECONDS:
+            print(f"\nGlobal runtime limit ({MAX_RUN_SECONDS}s) exceeded – closing position {ticket}.")
+            close_reason = "global_timeout"
+            close_result = close_position(ticket, symbol, volume, direction)
+            break
+
         positions = mt5.positions_get(ticket=ticket)
         if not positions:
             print(f"Position {ticket} no longer exists – assuming closed externally.")
@@ -191,6 +203,7 @@ def monitor_and_close(trade):
             close_result = close_position(ticket, symbol, volume, direction)
             break
 
+        # Per-trade timeout (kept as fallback)
         if time.time() - start_time > MAX_WAIT_SECONDS:
             print(f"\nMax wait time exceeded – closing position {ticket} manually.")
             close_reason = "timeout"
@@ -243,18 +256,24 @@ def main():
         mt5.shutdown()
         return
 
-    print(f"Starting unlimited bot for {symbol} – direction {order_type}")
-    print("Will re‑enter on SL until TP is hit.\n")
+    overall_start = time.time()
+    print(f"Starting bot for {symbol} – direction {order_type}")
+    print(f"Will run for max {MAX_RUN_SECONDS} seconds (5 minutes) or until TP is hit.\n")
 
     while True:
+        # Check global runtime before placing a new trade
+        if time.time() - overall_start > MAX_RUN_SECONDS:
+            print("Global runtime limit reached – no more trades.")
+            break
+
         # Place order
         trade = place_market_order(symbol, order_type, VOLUME)
         if trade is None:
             print("Failed to place order. Exiting.")
             break
 
-        # Monitor until close
-        trade = monitor_and_close(trade)
+        # Monitor until close (pass overall_start for timeout checks)
+        trade = monitor_and_close(trade, overall_start)
 
         # Attach metadata
         trade["conclusion"] = conclusion
@@ -267,9 +286,12 @@ def main():
         if trade.get("close_reason") == "take_profit":
             print("Take‑profit hit – stopping the bot.")
             break
+        elif trade.get("close_reason") == "global_timeout":
+            print("Global timeout triggered – bot stopped.")
+            break
         elif trade.get("close_reason") in ["stop_loss", "trailing_stop", "timeout", "external_close"]:
             print(f"Trade closed by {trade.get('close_reason')} – re‑entering...")
-            time.sleep(2)   # brief pause before next entry
+            time.sleep(2)
             continue
         else:
             print(f"Unexpected close reason: {trade.get('close_reason')} – stopping.")
