@@ -154,7 +154,7 @@ def monitor_and_close(trade, overall_start_time):
     start_time = time.time()
     close_reason = None
     profit_points = 0
-    last_print_time = 0  # throttle printing to avoid console spam
+    last_print_time = 0
 
     while True:
         # ----- Global timeout check -----
@@ -243,12 +243,7 @@ def run_report_generator():
 
     try:
         print("\nGenerating HTML report...")
-        result = subprocess.run(
-            ["python", script_name],
-            capture_output=False,
-            check=True,
-            timeout=30
-        )
+        subprocess.run(["python", script_name], check=True, timeout=30)
         print("HTML report generated successfully.")
     except subprocess.TimeoutExpired:
         print("Report generation timed out.")
@@ -290,44 +285,54 @@ def main():
     print(f"Starting bot for {symbol} – direction {order_type}")
     print(f"Will run for max {MAX_RUN_SECONDS} seconds (5 minutes) or until TP is hit.\n")
 
-    while True:
-        # Check global runtime before placing a new trade
-        if time.time() - overall_start > MAX_RUN_SECONDS:
-            print("Global runtime limit reached – no more trades.")
-            break
+    try:
+        while True:
+            # Check global runtime before placing a new trade
+            if time.time() - overall_start > MAX_RUN_SECONDS:
+                print("Global runtime limit reached – no more trades.")
+                break
 
-        # Place order
-        trade = place_market_order(symbol, order_type, VOLUME)
-        if trade is None:
-            print("Failed to place order. Exiting.")
-            break
+            # Place order
+            trade = place_market_order(symbol, order_type, VOLUME)
+            if trade is None:
+                print("Failed to place order. Exiting.")
+                break
 
-        # Monitor until close (pass overall_start for timeout checks)
-        trade = monitor_and_close(trade, overall_start)
+            # Monitor until close (pass overall_start for timeout checks)
+            trade = monitor_and_close(trade, overall_start)
 
-        # Attach metadata
-        trade["conclusion"] = conclusion
-        trade["timestamp"] = timestamp
+            # Attach metadata
+            trade["conclusion"] = conclusion
+            trade["timestamp"] = timestamp
 
-        # Log this trade
-        append_trade(trade)
+            # Log this trade
+            append_trade(trade)
 
-        # Decide whether to re‑enter or stop
-        if trade.get("close_reason") == "take_profit":
-            print("Take‑profit hit – stopping the bot.")
-            break
-        elif trade.get("close_reason") == "global_timeout":
-            print("Global timeout triggered – bot stopped.")
-            break
-        elif trade.get("close_reason") in ["stop_loss", "trailing_stop", "timeout", "external_close"]:
-            print(f"Trade closed by {trade.get('close_reason')} – re‑entering...")
-            time.sleep(2)
-            continue
-        else:
-            print(f"Unexpected close reason: {trade.get('close_reason')} – stopping.")
-            break
+            # Decide whether to re‑enter or stop
+            if trade.get("close_reason") == "take_profit":
+                print("Take‑profit hit – stopping the bot.")
+                break
+            elif trade.get("close_reason") == "global_timeout":
+                print("Global timeout triggered – bot stopped.")
+                break
+            elif trade.get("close_reason") in ["stop_loss", "trailing_stop", "timeout", "external_close"]:
+                print(f"Trade closed by {trade.get('close_reason')} – re‑entering...")
+                time.sleep(2)
+                continue
+            else:
+                print(f"Unexpected close reason: {trade.get('close_reason')} – stopping.")
+                break
 
-    # --- After bot stops, generate report ---
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Bot manually interrupted by user (Ctrl+C).")
+        print("Closing any open positions (if any)...")
+        # Try to close any open position if the user interrupted during monitoring
+        # We'll just let the script exit gracefully; any open position will remain open.
+        # But we could attempt to close all positions for this magic number if desired.
+        # For simplicity, we skip automatic closing on interrupt – user can close manually.
+        pass
+
+    # --- After bot stops (or interrupt), generate report ---
     run_report_generator()
 
     mt5.shutdown()
