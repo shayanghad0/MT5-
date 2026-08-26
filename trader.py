@@ -1,5 +1,7 @@
 import json
 import time
+import subprocess
+import os
 from datetime import datetime
 import MetaTrader5 as mt5
 
@@ -232,6 +234,29 @@ def monitor_and_close(trade, overall_start_time):
     trade["final_sl_points"] = sl_points
     return trade
 
+def run_report_generator():
+    """Run the external HTML report generator script."""
+    script_name = "generate_report.py"
+    if not os.path.isfile(script_name):
+        print(f"Warning: {script_name} not found – skipping report generation.")
+        return
+
+    try:
+        print("\nGenerating HTML report...")
+        result = subprocess.run(
+            ["python", script_name],
+            capture_output=False,
+            check=True,
+            timeout=30
+        )
+        print("HTML report generated successfully.")
+    except subprocess.TimeoutExpired:
+        print("Report generation timed out.")
+    except subprocess.CalledProcessError as e:
+        print(f"Report generation failed with error: {e}")
+    except Exception as e:
+        print(f"Unexpected error while generating report: {e}")
+
 def main():
     if not mt5.initialize():
         print("MT5 initialization failed. Error:", mt5.last_error())
@@ -301,6 +326,9 @@ def main():
         else:
             print(f"Unexpected close reason: {trade.get('close_reason')} – stopping.")
             break
+
+    # --- After bot stops, generate report ---
+    run_report_generator()
 
     mt5.shutdown()
     print("Bot finished.")
